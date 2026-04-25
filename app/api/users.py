@@ -150,26 +150,34 @@ def login(
     usuario = db.query(Usuario).filter(
         Usuario.email == credenciales.email
     ).first()
-    
+
     if not usuario:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email o contraseña incorrectos"
         )
-    
+
     # 2️⃣ Verificar la contraseña
     if not verify_password(credenciales.password, usuario.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email o contraseña incorrectos"
         )
-    
-    # 3️⃣ Crear JWT token
+
+    # 3️⃣ Rechazar si la cuenta está desactivada
+    if not usuario.activo:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tu cuenta ha sido desactivada"
+        )
+
+    # 4️⃣ Crear JWT token (sub = id_usuario, tipo = "usuario")
     access_token = create_access_token(
-        data={"sub": usuario.id_usuario, "email": usuario.email}
+        subject_id=usuario.id_usuario,
+        tipo="usuario",
     )
-    
-    # 4️⃣ Retornar token y datos del usuario
+
+    # 5️⃣ Retornar token y datos del usuario
     return {
         "access_token": access_token,
         "token_type": "bearer",

@@ -23,7 +23,20 @@ class Settings(BaseSettings):
     # App
     APP_NAME: str = "Emergencias Vehiculares API"
     DEBUG: bool = False
-    
+
+    # Cloudinary (almacenamiento de evidencias)
+    CLOUDINARY_CLOUD_NAME: str
+    CLOUDINARY_API_KEY: str
+    CLOUDINARY_API_SECRET: str
+
+    # AWS Bedrock (en espera de aumento de cuota)
+    AWS_REGION: str = "us-east-1"
+    BEDROCK_MODEL_ID: str = "us.amazon.nova-pro-v1:0"
+
+    # Google Gemini (IA activa)
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-3-flash-preview"
+
     class Config:
         # El archivo .env está en la raíz del proyecto Backend
         env_file = ".env"

@@ -1,396 +1,272 @@
-# 🔐 Guía de Login por Roles - API Emergencias Vehiculares
+# 🔐 Guía de Login - Panel Web (Angular)
 
-## 📋 Estructura de Roles
+Guía de autenticación **exclusiva para los roles web** de la plataforma: **Taller** y **Admin**.
 
-```
-┌─────────────────────────────────────────┐
-│  PLATAFORMA DE EMERGENCIAS VEHICULARES  │
-└─────────────────────────────────────────┘
-        │
-        ├── 📱 FLUTTER (App Móvil) 
-        │   ├── id_rol=1 → Cliente (Conductor)
-        │   └── id_rol=3 → Técnico (El Mecánico)
-        │
-        └── 🌐 ANGULAR (Web)
-            ├── id_rol=2 → Taller
-            └── id_rol=4 → Admin del Sistema
-```
+> Para levantar el servidor:
+> ```
+> cd "c:\Users\Isael Ortiz\Documents\yary\Backend" ; .\venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+> ```
 
 ---
 
-## 🔗 Endpoint Único de Login
+## 📋 Arquitectura de Autenticación
+
+La plataforma tiene **dos sistemas de login separados**, cada uno contra su propia tabla:
 
 ```
-POST /usuarios/login
-Content-Type: application/json
+┌──────────────────────────────────────────────────┐
+│  PANEL WEB (Angular)                             │
+├──────────────────────────────────────────────────┤
+│                                                  │
+│  🏭 TALLER  →  POST /talleres/login             │
+│               tabla: taller                      │
+│               token.tipo = "taller"              │
+│                                                  │
+│  👨‍💼 ADMIN  →  POST /usuarios/login              │
+│               tabla: usuario (id_rol = 4)        │
+│               token.tipo = "usuario"             │
+│                                                  │
+└──────────────────────────────────────────────────┘
 ```
 
-**Todos los roles usan el MISMO endpoint**, pero con credenciales diferentes.
+**Importante:** el token emitido por `/talleres/login` **no funciona** en endpoints de usuario, y viceversa. El servidor valida el claim `tipo` del JWT.
 
 ---
 
-## 📱 FLUTTER - App Móvil
+## 🏭 1️⃣ Login de Taller (`id_taller`)
 
-### 1️⃣ Login: Cliente (Conductor) - id_rol=1
+El Taller es una entidad independiente con su propia cuenta.
 
-**Request:**
+### Request
 ```bash
-curl -X POST "http://localhost:8000/usuarios/login" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "conductor@ejemplo.com",
-    "password": "miPassword123!"
-  }'
-```
-
-**Response:**
-```json
-{
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "token_type": "bearer",
-  "usuario": {
-    "id_usuario": 5,
-    "id_rol": 1,
-    "nombre": "Juan Conductor",
-    "email": "conductor@ejemplo.com",
-    "activo": true,
-    "created_at": "2026-04-15T10:30:00"
-  }
-}
-```
-
-**Acceso a endpoints:**
-- ✅ GET `/usuarios/perfil` - Ver su perfil
-- ✅ POST `/incidencias` - **Reportar emergencia (CU-05)**
-- ✅ GET `/incidencias/mis-incidentes` - Ver sus incidentes
-- ✅ PUT `/usuarios/perfil` - Editar su perfil
-- ❌ GET `/talleres` - No tiene acceso
-- ❌ GET `/admin/reportes` - No tiene acceso
-
----
-
-### 2️⃣ Login: Técnico (Mecánico) - id_rol=3
-
-**Request:**
-```bash
-curl -X POST "http://localhost:8000/usuarios/login" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "tecnico.juan@taller.com",
-    "password": "password456!"
-  }'
-```
-
-**Response:**
-```json
-{
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "token_type": "bearer",
-  "usuario": {
-    "id_usuario": 12,
-    "id_rol": 3,
-    "nombre": "Juan Pérez - Técnico",
-    "email": "tecnico.juan@taller.com",
-    "activo": true,
-    "created_at": "2026-01-10T08:15:00"
-  }
-}
-```
-
-**Acceso a endpoints:**
-- ✅ GET `/usuarios/perfil` - Ver su perfil
-- ✅ GET `/asignaciones/pendientes` - Ver incidentes asignados
-- ✅ PUT `/asignaciones/{id}/status` - Actualizar estado
-- ✅ POST `/asignaciones/{id}/completar` - Marcar como resuelto
-- ❌ GET `/incidencias` - No puede ver todos
-- ❌ DELETE `/usuarios` - No puede eliminar usuarios
-
----
-
-## 🌐 ANGULAR - Panel Web
-
-### 3️⃣ Login: Taller (Gerente) - id_rol=2
-
-**Request:**
-```bash
-curl -X POST "http://localhost:8000/usuarios/login" \
+curl -X POST "http://localhost:8000/talleres/login" \
   -H "Content-Type: application/json" \
   -d '{
     "email": "gerente@tallerexcelente.com",
-    "password": "gerente789!"
+    "password": "taller123!"
   }'
 ```
 
-**Response:**
+### Response (200 OK)
 ```json
 {
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "token_type": "bearer",
-  "usuario": {
-    "id_usuario": 8,
-    "id_rol": 2,
-    "nombre": "Carlos - Gerente Taller",
+  "taller": {
+    "id_taller": 1,
+    "nombre": "Taller Excelente",
     "email": "gerente@tallerexcelente.com",
+    "telefono": "+57 3105552222",
+    "direccion": "Cra 45 #123-45, Medellín",
+    "latitud": 6.2442,
+    "longitud": -75.5812,
+    "capacidad_max": 5,
     "activo": true,
-    "created_at": "2025-06-20T14:00:00"
+    "verificado": true,
+    "created_at": "2026-04-18T22:56:46"
   }
 }
 ```
 
-**Acceso a endpoints:**
-- ✅ GET `/usuarios/perfil` - Ver su perfil
-- ✅ GET `/talleres/mi-taller` - Ver información del taller
-- ✅ GET `/asignaciones` - Ver todas las asignaciones del taller
-- ✅ POST `/asignaciones/{id}/tecnico` - Asignar técnico
-- ✅ GET `/reportes/ganancias` - Ver ganancias del mes
-- ✅ PUT `/talleres/{id}` - Editar datos del taller
-- ❌ GET `/admin/usuarios` - No puede gestionar usuarios globales
-- ❌ DELETE `/incidencias/{id}` - No puede eliminar incidentes
+### Endpoints accesibles con este token
+- ✅ `GET /talleres/mi-taller` — ver info del taller
+- ✅ `PUT /talleres/mi-taller` — editar info del taller
+- ✅ `GET /talleres/mi-taller/tecnicos` — listar técnicos del taller
+- ✅ `GET /talleres/mi-taller/tecnicos/{id}` — detalle de un técnico
+- ✅ `POST /talleres/mi-taller/tecnicos` — agregar técnico
+- ✅ `PUT /talleres/mi-taller/tecnicos/{id}` — editar técnico
+- ✅ `DELETE /talleres/mi-taller/tecnicos/{id}` — baja lógica del técnico
+- ❌ `GET /usuarios/perfil` — token de taller no sirve aquí
+- ❌ `GET /admin/...` — no tiene permisos de admin
 
 ---
 
-### 4️⃣ Login: Administrador - id_rol=4
+## 👨‍💼 2️⃣ Login de Admin (`id_rol = 4`)
 
-**Request:**
+El Admin es un registro en la tabla `usuario` con rol administrador.
+
+### Request
 ```bash
 curl -X POST "http://localhost:8000/usuarios/login" \
   -H "Content-Type: application/json" \
   -d '{
     "email": "admin@plataforma.com",
-    "password": "admin2026!"
+    "password": "admin123!"
   }'
 ```
 
-**Response:**
+### Response (200 OK)
 ```json
 {
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "token_type": "bearer",
   "usuario": {
-    "id_usuario": 1,
+    "id_usuario": 2,
     "id_rol": 4,
     "nombre": "Administrador Sistema",
     "email": "admin@plataforma.com",
+    "telefono": "+57 3009999999",
     "activo": true,
-    "created_at": "2026-01-01T00:00:00"
+    "created_at": "2026-04-18T22:56:46"
   }
 }
 ```
 
-**Acceso a endpoints:**
-- ✅ GET `/admin/usuarios` - Ver todos los usuarios
-- ✅ DELETE `/admin/usuarios/{id}` - Eliminar usuarios
-- ✅ GET `/admin/reportes/globales` - Reportes generales
-- ✅ GET `/admin/talleres` - Gestionar talleres
-- ✅ PUT `/admin/talleres/{id}/verificar` - Verificar talleres
-- ✅ POST `/admin/categorias` - Crear categorías
-- ✅ GET `/admin/mettricas` - Ver métricas de la plataforma
-- ✅ TODO LO DEMÁS - Acceso total
+### Endpoints accesibles con este token
+- ✅ `GET /usuarios/perfil` — ver su perfil
+- ✅ `PUT /usuarios/perfil` — editar su perfil
+- ✅ `DELETE /usuarios/perfil` — dar de baja su cuenta
+- 🔜 Endpoints de administración global (pendientes de implementar)
 
 ---
 
-## 🔑 Flujo Completo de Autenticación
+## 🔑 Flujo de Autenticación (Angular)
 
-### Paso 1️⃣: Login
+### Paso 1️⃣ — Login
 ```
-POST /usuarios/login
+POST /talleres/login      (taller)
+POST /usuarios/login      (admin)
 ```
-**Input:** email + password
-**Output:** access_token (JWT)
+**Input:** `email` + `password`
+**Output:** `access_token` (JWT)
 
-### Paso 2️⃣: Guardar Token
-```javascript
-// En Flutter (Dart):
-SharedPreferences prefs = await SharedPreferences.getInstance();
-prefs.setString('access_token', response['access_token']);
-
-// En Angular (TypeScript):
+### Paso 2️⃣ — Guardar token en `localStorage`
+```typescript
 localStorage.setItem('access_token', response.access_token);
+localStorage.setItem('tipo', 'taller'); // o 'admin'
 ```
 
-### Paso 3️⃣: Usar Token en Requests
-```javascript
-// Flutter (Dart):
-String token = prefs.getString('access_token') ?? '';
-var headers = {
-  'Authorization': 'Bearer $token',
-  'Content-Type': 'application/json'
-};
-
-// Angular (TypeScript):
+### Paso 3️⃣ — Usar token en requests protegidos
+```typescript
 const token = localStorage.getItem('access_token');
-let headers = new HttpHeaders({
+const headers = new HttpHeaders({
   'Authorization': `Bearer ${token}`,
   'Content-Type': 'application/json'
 });
 ```
 
-### Paso 4️⃣: Llamar Endpoint Protegido
+### Paso 4️⃣ — Llamar endpoint protegido
 ```bash
-curl -X GET "http://localhost:8000/usuarios/perfil" \
+curl -X GET "http://localhost:8000/talleres/mi-taller" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 
 ---
 
-## 📊 Matriz de Permisos
+## 📊 Matriz de Permisos (Web)
 
-| Endpoint | Cliente | Técnico | Taller | Admin |
-|----------|---------|---------|--------|-------|
-| POST /usuarios/login | ✅ | ✅ | ✅ | ✅ |
-| GET /usuarios/perfil | ✅ | ✅ | ✅ | ✅ |
-| PUT /usuarios/perfil | ✅ | ✅ | ✅ | ✅ |
-| DELETE /usuarios/perfil | ✅ | ✅ | ✅ | ✅ |
-| **POST /incidencias** | ✅ | ❌ | ❌ | ❌ |
-| GET /incidencias/mis-incidentes | ✅ | ❌ | ❌ | ❌ |
-| GET /asignaciones/pendientes | ❌ | ✅ | ✅ | ✅ |
-| PUT /asignaciones/{id}/status | ❌ | ✅ | ✅ | ✅ |
-| GET /reportes/ganancias | ❌ | ❌ | ✅ | ✅ |
-| GET /admin/reportes | ❌ | ❌ | ❌ | ✅ |
-| GET /admin/usuarios | ❌ | ❌ | ❌ | ✅ |
-| DELETE /admin/usuarios/{id} | ❌ | ❌ | ❌ | ✅ |
+| Endpoint | Taller | Admin |
+|----------|--------|-------|
+| `POST /talleres/login` | ✅ | ❌ |
+| `POST /usuarios/login` | ❌ | ✅ |
+| `GET /talleres/mi-taller` | ✅ | ❌ |
+| `PUT /talleres/mi-taller` | ✅ | ❌ |
+| `GET /talleres/mi-taller/tecnicos` | ✅ | ❌ |
+| `POST /talleres/mi-taller/tecnicos` | ✅ | ❌ |
+| `PUT /talleres/mi-taller/tecnicos/{id}` | ✅ | ❌ |
+| `DELETE /talleres/mi-taller/tecnicos/{id}` | ✅ | ❌ |
+| `GET /usuarios/perfil` | ❌ | ✅ |
+| `PUT /usuarios/perfil` | ❌ | ✅ |
+| `DELETE /usuarios/perfil` | ❌ | ✅ |
+
+> El admin **no** comparte endpoints con el taller: cada uno tiene su propio dominio de acceso.
 
 ---
 
 ## ⚠️ Errores Comunes
 
-### 1️⃣ Email no registrado
+### 401 — Email o contraseña incorrectos
 ```json
-{
-  "detail": "Email o contraseña incorrectos"
-}
+{ "detail": "Email o contraseña incorrectos" }
 ```
-**Causa:** El usuario no existe en la BD
-**Solución:** Crear el usuario primero con POST /usuarios/registro
+**Causa:** Credenciales inválidas.
+**Solución:** Verificar el email y el password.
 
-### 2️⃣ Contraseña incorrecta
+### 401 — Token cruzado
 ```json
-{
-  "detail": "Email o contraseña incorrectos"
-}
+{ "detail": "No se pudieron validar las credenciales" }
 ```
-**Causa:** Hash no coincide
-**Solución:** Verificar que escribiste bien la contraseña
+**Causa:** Usaste un token de `/talleres/login` en un endpoint de `/usuarios/...`, o al revés.
+**Solución:** Hacer login contra el endpoint correcto según el rol.
 
-### 3️⃣ Usuario inactivo (dado de baja)
+### 403 — Cuenta desactivada
 ```json
-{
-  "detail": "El usuario ha sido desactivado"
-}
+{ "detail": "El taller ha sido desactivado" }
 ```
-**Causa:** activo=False
-**Solución:** Contactar administrador para reactivar
+o
+```json
+{ "detail": "Tu cuenta ha sido desactivada" }
+```
+**Causa:** El registro tiene `activo = false`.
+**Solución:** Reactivar desde BD o contactar soporte.
 
-### 4️⃣ Token expirado
+### 401 — Token expirado
 ```json
-{
-  "detail": "No se pudieron validar las credenciales"
-}
+{ "detail": "No se pudieron validar las credenciales" }
 ```
-**Causa:** El token tiene más de 30 minutos (configurable)
-**Solución:** Hacer login nuevamente
+**Causa:** El JWT tiene más de `ACCESS_TOKEN_EXPIRE_MINUTES` (30 min por defecto).
+**Solución:** Hacer login nuevamente.
 
 ---
 
-## 🚀 Ejemplo Completo en Flutter
-
-```dart
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
-
-class AuthService {
-  static const String baseUrl = "http://localhost:8000";
-  
-  Future<bool> login(String email, String password) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/usuarios/login'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'email': email,
-          'password': password,
-        }),
-      );
-      
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final prefs = await SharedPreferences.getInstance();
-        
-        // Guardar token
-        await prefs.setString('access_token', data['access_token']);
-        await prefs.setString('user_id', data['usuario']['id_usuario'].toString());
-        await prefs.setString('user_rol', data['usuario']['id_rol'].toString());
-        await prefs.setString('user_name', data['usuario']['nombre']);
-        
-        return true;
-      }
-      return false;
-    } catch (e) {
-      print('Error en login: $e');
-      return false;
-    }
-  }
-  
-  Future<String?> getToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('access_token');
-  }
-  
-  Future<void> logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('access_token');
-    await prefs.remove('user_id');
-    await prefs.remove('user_rol');
-    await prefs.remove('user_name');
-  }
-}
-```
-
----
-
-## 🚀 Ejemplo Completo en Angular
+## 🚀 Ejemplo en Angular — Servicio de Autenticación
 
 ```typescript
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { Observable, tap } from 'rxjs';
 
-@Injectable({
-  providedIn: 'root'
-})
+@Injectable({ providedIn: 'root' })
 export class AuthService {
   private baseUrl = 'http://localhost:8000';
-  
+
   constructor(private http: HttpClient) {}
-  
-  login(email: string, password: string): Observable<any> {
-    return this.http.post(`${this.baseUrl}/usuarios/login`, {
-      email,
-      password
+
+  // ============ LOGIN TALLER ============
+  loginTaller(email: string, password: string): Observable<any> {
+    return this.http
+      .post<any>(`${this.baseUrl}/talleres/login`, { email, password })
+      .pipe(tap(res => {
+        localStorage.setItem('access_token', res.access_token);
+        localStorage.setItem('tipo', 'taller');
+        localStorage.setItem('taller', JSON.stringify(res.taller));
+      }));
+  }
+
+  // ============ LOGIN ADMIN ============
+  loginAdmin(email: string, password: string): Observable<any> {
+    return this.http
+      .post<any>(`${this.baseUrl}/usuarios/login`, { email, password })
+      .pipe(tap(res => {
+        localStorage.setItem('access_token', res.access_token);
+        localStorage.setItem('tipo', 'admin');
+        localStorage.setItem('usuario', JSON.stringify(res.usuario));
+      }));
+  }
+
+  // ============ HEADERS AUTENTICADOS ============
+  authHeaders(): HttpHeaders {
+    const token = localStorage.getItem('access_token') || '';
+    return new HttpHeaders({
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
     });
   }
-  
-  saveToken(token: string, userData: any) {
-    localStorage.setItem('access_token', token);
-    localStorage.setItem('user_id', userData.id_usuario);
-    localStorage.setItem('user_rol', userData.id_rol);
-    localStorage.setItem('user_name', userData.nombre);
-  }
-  
-  getToken(): string | null {
-    return localStorage.getItem('access_token');
-  }
-  
-  logout() {
+
+  // ============ LOGOUT ============
+  logout(): void {
     localStorage.removeItem('access_token');
-    localStorage.removeItem('user_id');
-    localStorage.removeItem('user_rol');
-    localStorage.removeItem('user_name');
+    localStorage.removeItem('tipo');
+    localStorage.removeItem('taller');
+    localStorage.removeItem('usuario');
   }
-  
+
   isAuthenticated(): boolean {
-    return !!this.getToken();
+    return !!localStorage.getItem('access_token');
+  }
+
+  getTipo(): 'taller' | 'admin' | null {
+    return localStorage.getItem('tipo') as any;
   }
 }
 ```
@@ -399,11 +275,20 @@ export class AuthService {
 
 ## 📅 Vigencia del Token
 
-- **Duración:** 30 minutos (configurable en `.env`)
-- **Almacenamiento:** JWT en memory (cliente)
-- **Renovación:** Hacer login nuevamente
-- **Almacenamiento seguro:** `localStorage` (Angular), `SharedPreferences` (Flutter)
+- **Duración:** 30 minutos (configurable en `.env` con `ACCESS_TOKEN_EXPIRE_MINUTES`)
+- **Almacenamiento:** `localStorage` en el navegador
+- **Renovación:** hacer login nuevamente (no hay refresh token)
+- **Claim `tipo`:** el backend valida que el token sea del tipo correcto para cada endpoint
 
 ---
 
-**¡Listo para implementar en tus frontends!** 🎉
+## 📌 Cuentas de Prueba (seed inicial)
+
+| Rol | Endpoint de login | Email | Password |
+|---|---|---|---|
+| 🏭 Taller | `POST /talleres/login` | `gerente@tallerexcelente.com` | `taller123!` |
+| 👨‍💼 Admin | `POST /usuarios/login` | `admin@plataforma.com` | `admin123!` |
+
+---
+
+**Listo para integrar en el panel Angular.** 🌐

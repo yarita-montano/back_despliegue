@@ -9,10 +9,20 @@ from app.schemas.user_schema import (
     LoginRequest,
     TokenResponse,
     RolResponse,
-    MensajeResponse
+    MensajeResponse,
+)
+from app.schemas.taller_schema import (
+    TallerLoginRequest,
+    TallerUpdate,
+    TallerResponse,
+    TallerTokenResponse,
+    TecnicoCreate,
+    TecnicoUpdate,
+    TecnicoResponse,
 )
 
 __all__ = [
+    # Usuario
     "UsuarioCreate",
     "UsuarioResponse",
     "UsuarioDetailResponse",
@@ -20,5 +30,13 @@ __all__ = [
     "LoginRequest",
     "TokenResponse",
     "RolResponse",
-    "MensajeResponse"
+    "MensajeResponse",
+    # Taller
+    "TallerLoginRequest",
+    "TallerUpdate",
+    "TallerResponse",
+    "TallerTokenResponse",
+    "TecnicoCreate",
+    "TecnicoUpdate",
+    "TecnicoResponse",
 ]
