@@ -6,7 +6,7 @@ Importante:
 - El Técnico NO se autentica: es solo un registro operativo del taller.
 """
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 
@@ -179,6 +179,30 @@ class IncidenteParaTaller(BaseModel):
         from_attributes = True
 
 
+class EvidenciaMiniT(BaseModel):
+    """Evidencia del incidente (imagen, audio, texto)"""
+    id_evidencia: int
+    id_tipo_evidencia: int
+    url_archivo: str
+    transcripcion_audio: Optional[str] = None
+    descripcion_ia: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class IncidenteParaTecnico(IncidenteParaTaller):
+    """Incidente con evidencias del cliente, para vista del técnico"""
+    evidencias: List[EvidenciaMiniT] = []
+
+
+class UbicacionTecnicoRequest(BaseModel):
+    """Actualización de ubicación en tiempo real del técnico"""
+    latitud: float = Field(..., ge=-90, le=90)
+    longitud: float = Field(..., ge=-180, le=180)
+
+
 class AsignacionTallerResponse(BaseModel):
     """Asignación vista desde el taller, con info del incidente y cliente"""
     id_asignacion: int
@@ -223,11 +247,8 @@ class TecnicoAsignacionResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    # Estado de la asignación
     estado: EstadoAsignacionMiniT
-
-    # Detalles del incidente
-    incidente: IncidenteParaTaller
+    incidente: IncidenteParaTecnico  # Incluye evidencias del cliente
 
     class Config:
         from_attributes = True

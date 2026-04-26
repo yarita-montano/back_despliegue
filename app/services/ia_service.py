@@ -1,16 +1,4 @@
-"""
-Servicio de IA con Google Gemini 2.5 Pro.
 
-Clasifica un incidente vehicular a partir de:
-  - descripcion del usuario
-  - evidencias (imagenes de Cloudinary)
-  - catalogo de categorias y prioridades disponibles
-
-Devuelve: id_categoria, id_prioridad, resumen_ia, confianza (0..1).
-
-Nota: estructura preparada para migrar a AWS Bedrock (Nova Pro / Claude)
-cuando AWS apruebe el aumento de cuota. Solo cambia el bloque `_llamar_ia`.
-"""
 import json
 import logging
 import re

@@ -1,6 +1,6 @@
 """
-Módulo de Base de Datos
-"""
-from app.db.session import Base, SessionLocal, engine, get_db
+Módulo de Base de Datos.
 
-__all__ = ["Base", "SessionLocal", "engine", "get_db"]
+Se deja sin imports de nivel paquete para evitar ciclos de importación
+al cargar la configuración y la sesión SQLAlchemy.
+"""

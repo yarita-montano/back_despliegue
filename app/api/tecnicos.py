@@ -4,10 +4,12 @@ Router del Técnico.
 El Técnico es un USUARIO (tabla usuario, id_rol=3) que se autentica normalmente.
 Desde la app móvil (Flutter) usa POST /usuarios/login con sus credenciales.
 
-Este router contiene endpoints específicos para técnicos que actúan sobre asignaciones:
-  GET /tecnicos/asignacion-actual  → obtener la asignación activa (aceptada o en_camino)
-  PUT /tecnicos/mis-asignaciones/{id}/iniciar-viaje  → técnico sale hacia el cliente
-  PUT /tecnicos/mis-asignaciones/{id}/completar      → técnico marca trabajo como completado
+Endpoints:
+  GET /tecnicos/asignacion-actual                      → asignación activa
+  PUT /tecnicos/mi-ubicacion                           → actualizar ubicación GPS en tiempo real
+  GET /tecnicos/mis-asignaciones/{id}/evidencias       → ver evidencias del incidente
+  PUT /tecnicos/mis-asignaciones/{id}/iniciar-viaje    → aceptada → en_camino
+  PUT /tecnicos/mis-asignaciones/{id}/completar        → en_camino → completada
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -15,10 +17,12 @@ from typing import List
 
 from app.db.session import get_db
 from app.models.user_model import Usuario
-from app.models.incidente import Asignacion, Incidente
+from app.models.incidente import Asignacion, Incidente, Evidencia
+from app.models.usuario_taller import UsuarioTaller
 from app.models.catalogos import EstadoAsignacion, EstadoIncidente
 from app.schemas.taller_schema import (
-    TecnicoAsignacionResponse, IniciarViajeRequest, CompletarAsignacionRequest
+    TecnicoAsignacionResponse, IniciarViajeRequest, CompletarAsignacionRequest,
+    UbicacionTecnicoRequest, EvidenciaMiniT, MensajeResponse
 )
 from app.core.security import get_current_user
 from app.services.trazabilidad import cambiar_estado_asignacion, cambiar_estado_incidente
@@ -69,13 +73,79 @@ def obtener_asignacion_actual(
 
     return asignacion
 
+
+# ============ UBICACIÓN EN TIEMPO REAL ============
+
+@router.put(
+    "/mi-ubicacion",
+    response_model=MensajeResponse,
+    summary="Actualizar ubicación GPS del técnico",
+    description="El técnico reporta su posición actual. Se guarda en usuario_taller para que el taller y el cliente puedan verla.",
+)
+def actualizar_ubicacion(
+    payload: UbicacionTecnicoRequest,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    if current_user.id_rol != 3:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo técnicos pueden usar este endpoint",
+        )
+
+    vinculo = db.query(UsuarioTaller).filter(
+        UsuarioTaller.id_usuario == current_user.id_usuario,
+        UsuarioTaller.activo == True,
+    ).first()
+
+    if not vinculo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No tienes vínculo activo con ningún taller",
+        )
+
+    vinculo.latitud = payload.latitud
+    vinculo.longitud = payload.longitud
+    db.commit()
+
+    return {"mensaje": f"Ubicación actualizada: {payload.latitud}, {payload.longitud}"}
+
+
+# ============ EVIDENCIAS ============
+
+@router.get(
+    "/mis-asignaciones/{id_asignacion}/evidencias",
+    response_model=List[EvidenciaMiniT],
+    summary="Ver evidencias del incidente",
+    description="Lista todas las evidencias (fotos, audios, texto) que el cliente subió al reportar el incidente.",
+)
+def listar_evidencias(
+    id_asignacion: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    if current_user.id_rol != 3:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo técnicos pueden usar este endpoint",
+        )
+
+    asignacion = db.query(Asignacion).filter(
+        Asignacion.id_asignacion == id_asignacion,
+        Asignacion.id_usuario == current_user.id_usuario,
+    ).first()
+
     if not asignacion:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="No tienes asignaciones activas en este momento",
+            detail="Asignación no encontrada o no asignada a ti",
         )
 
-    return asignacion
+    evidencias = db.query(Evidencia).filter(
+        Evidencia.id_incidente == asignacion.id_incidente
+    ).all()
+
+    return evidencias
 
 
 # ============ A.2 — CU-20: TRANSICIONES EN_CAMINO Y COMPLETADA ============

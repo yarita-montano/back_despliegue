@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-3-flash-preview"
 
+    # Firebase Cloud Messaging
+    FIREBASE_CREDENTIALS_PATH: str = ""
+
     class Config:
         # El archivo .env está en la raíz del proyecto Backend
         env_file = ".env"

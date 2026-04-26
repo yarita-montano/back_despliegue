@@ -1,5 +1,5 @@
 """
-Trazabilidad — Escribe cambios de estado en historial.
+Trazabilidad — Escribe cambios de estado en historial y envía notificaciones push.
 CU-33 - Registra cada transición de estado en las tablas de historial.
 """
 from typing import Optional
@@ -12,6 +12,19 @@ from app.models.incidente import (
 from app.models.catalogos import EstadoAsignacion, EstadoIncidente
 
 logger = logging.getLogger("trazabilidad")
+
+# Mensajes de notificación por estado de asignación
+_NOTIF_ASIGNACION = {
+    "aceptada":   ("Solicitud aceptada", "Tu solicitud fue aceptada por el taller. Un técnico está siendo asignado."),
+    "en_camino":  ("Técnico en camino", "El técnico ya salió hacia tu ubicación."),
+    "completada": ("Servicio completado", "El técnico ha completado el servicio. ¡Gracias por usar Yary!"),
+    "rechazada":  ("Solicitud rechazada", "Tu solicitud fue rechazada por el taller."),
+}
+
+# Mensajes de notificación por estado de incidente para el taller
+_NOTIF_INCIDENTE_TALLER = {
+    "pendiente":   ("Nueva solicitud de asistencia", "Has recibido una nueva solicitud de emergencia vehicular."),
+}
 
 
 def registrar_cambio_estado_asignacion(
@@ -89,20 +102,8 @@ def cambiar_estado_asignacion(
     observacion: Optional[str] = None,
 ) -> EstadoAsignacion:
     """
-    Busca el nuevo estado por nombre, registra en historial,
-    y actualiza la asignación. NO hace commit — el caller decide cuándo.
-    
-    Args:
-        db: Sesión de BD
-        asignacion: Objeto asignación a actualizar
-        nombre_estado_nuevo: Nombre del estado destino (ej: "aceptada", "en_camino")
-        observacion: Nota opcional para el historial
-    
-    Returns:
-        El objeto EstadoAsignacion del nuevo estado
-    
-    Raises:
-        ValueError: Si el catálogo no contiene ese nombre de estado
+    Busca el nuevo estado por nombre, registra en historial, actualiza la asignación
+    y envía notificación push al cliente si corresponde. NO hace commit.
     """
     nuevo = db.query(EstadoAsignacion).filter_by(nombre=nombre_estado_nuevo).first()
     if not nuevo:
@@ -113,6 +114,15 @@ def cambiar_estado_asignacion(
         db, asignacion, id_anterior, nuevo.id_estado_asignacion, observacion
     )
     asignacion.id_estado_asignacion = nuevo.id_estado_asignacion
+
+    # Notificación push al cliente
+    if nombre_estado_nuevo in _NOTIF_ASIGNACION:
+        titulo, mensaje = _NOTIF_ASIGNACION[nombre_estado_nuevo]
+        _notificar_cliente_por_asignacion(db, asignacion, titulo, mensaje, nombre_estado_nuevo)
+
+    # Métricas de tiempo
+    _actualizar_metrica_asignacion(db, asignacion, nombre_estado_nuevo)
+
     return nuevo
 
 
@@ -148,3 +158,78 @@ def cambiar_estado_incidente(
     )
     incidente.id_estado = nuevo.id_estado
     return nuevo
+
+
+# ── Helpers de notificación ───────────────────────────────────────────────────
+
+def _notificar_cliente_por_asignacion(
+    db: Session,
+    asignacion: Asignacion,
+    titulo: str,
+    mensaje: str,
+    nombre_estado: str,
+) -> None:
+    """Crea notificación y envía push al cliente dueño del incidente."""
+    try:
+        from app.models.incidente import Incidente as IncidenteModel
+        from app.models.user_model import Usuario as UsuarioModel
+        from app.services.notificacion_service import crear_y_enviar_notificacion
+
+        incidente = db.get(IncidenteModel, asignacion.id_incidente)
+        if not incidente or not incidente.id_usuario:
+            return
+
+        usuario = db.get(UsuarioModel, incidente.id_usuario)
+
+        crear_y_enviar_notificacion(
+            db,
+            titulo=titulo,
+            mensaje=mensaje,
+            id_usuario=incidente.id_usuario,
+            id_incidente=asignacion.id_incidente,
+            push_token=usuario.push_token if usuario else None,
+            data={"tipo": "estado_asignacion", "estado": nombre_estado,
+                  "id_asignacion": str(asignacion.id_asignacion)},
+        )
+    except Exception as exc:
+        logger.error(f"[TRAZABILIDAD] Error enviando notificación push: {exc}")
+
+
+def _actualizar_metrica_asignacion(
+    db: Session,
+    asignacion: Asignacion,
+    nombre_estado_nuevo: str,
+) -> None:
+    """Actualiza timestamps de Metrica al cambiar estado de asignación."""
+    try:
+        from datetime import datetime, timezone
+        from app.models.transaccional import Metrica
+
+        metrica = db.query(Metrica).filter(
+            Metrica.id_incidente == asignacion.id_incidente
+        ).first()
+        if not metrica:
+            return
+
+        ahora = datetime.now(timezone.utc)
+
+        if nombre_estado_nuevo == "aceptada":
+            metrica.fecha_asignacion = ahora
+            if metrica.fecha_inicio:
+                delta = (ahora - metrica.fecha_inicio).total_seconds() / 60
+                metrica.tiempo_respuesta_min = int(delta)
+
+        elif nombre_estado_nuevo == "en_camino":
+            metrica.fecha_llegada_tecnico = ahora
+            if metrica.fecha_asignacion:
+                delta = (ahora - metrica.fecha_asignacion).total_seconds() / 60
+                metrica.tiempo_llegada_min = int(delta)
+
+        elif nombre_estado_nuevo == "completada":
+            metrica.fecha_fin = ahora
+            if metrica.fecha_inicio:
+                delta = (ahora - metrica.fecha_inicio).total_seconds() / 60
+                metrica.tiempo_resolucion_min = int(delta)
+
+    except Exception as exc:
+        logger.error(f"[TRAZABILIDAD] Error actualizando métrica: {exc}")

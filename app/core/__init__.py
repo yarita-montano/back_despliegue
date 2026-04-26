@@ -1,24 +1,6 @@
 """
-Módulo Core de la aplicación
-Incluye configuración y seguridad
-"""
-from app.core.config import get_settings, Settings
-from app.core.security import (
-    hash_password,
-    verify_password,
-    create_access_token,
-    verify_token,
-    get_current_user,
-    oauth2_scheme
-)
+Módulo Core de la aplicación.
 
-__all__ = [
-    "get_settings",
-    "Settings",
-    "hash_password",
-    "verify_password",
-    "create_access_token",
-    "verify_token",
-    "get_current_user",
-    "oauth2_scheme"
-]
+Se deja intencionalmente sin imports de nivel paquete para evitar ciclos
+entre configuración, seguridad y acceso a base de datos.
+"""

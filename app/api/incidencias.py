@@ -14,8 +14,10 @@ from datetime import date
 
 from app.db.session import get_db
 from app.models.usuario import Usuario, Vehiculo
+from app.models.usuario_taller import UsuarioTaller
 from app.models.incidente import Incidente, Asignacion, CandidatoAsignacion, Evaluacion
 from app.models.catalogos import CategoriaProblema, Prioridad, EstadoIncidente, EstadoAsignacion
+from app.models.transaccional import Metrica
 from pydantic import BaseModel, Field
 from app.schemas.incidente_schema import (
     IncidenteCreate,
@@ -181,6 +183,15 @@ def reportar_incidencia(
     )
 
     db.add(nuevo_incidente)
+    db.flush()  # obtener id_incidente antes del commit
+
+    # Auto-registrar métrica con fecha_inicio
+    from datetime import datetime, timezone
+    metrica = Metrica(
+        id_incidente=nuevo_incidente.id_incidente,
+        fecha_inicio=datetime.now(timezone.utc),
+    )
+    db.add(metrica)
     db.commit()
     db.refresh(nuevo_incidente)
 
@@ -263,6 +274,16 @@ def analizar_incidente_con_ia(
 
 class CambiarTallerRequest(BaseModel):
     id_candidato: int = Field(..., description="ID del candidato de asignacion a seleccionar")
+
+
+class TecnicoUbicacionResponse(BaseModel):
+    id_incidente: int
+    id_asignacion: int
+    id_tecnico: int
+    nombre_tecnico: str
+    estado_asignacion: str
+    latitud_tecnico: float
+    longitud_tecnico: float
 
 
 @router.put(
@@ -351,6 +372,70 @@ def obtener_incidencia(
         )
 
     return incidente
+
+
+@router.get(
+    "/{id_incidente}/tecnico-ubicacion",
+    response_model=TecnicoUbicacionResponse,
+    summary="Obtener ubicación actual del técnico",
+    description="Retorna la posición actual del técnico asignado para que el cliente lo visualice en tiempo real."
+)
+def obtener_ubicacion_tecnico(
+    id_incidente: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    incidente = db.query(Incidente).filter(
+        Incidente.id_incidente == id_incidente,
+        Incidente.id_usuario == current_user.id_usuario
+    ).first()
+
+    if not incidente:
+        raise HTTPException(
+            status_code=404,
+            detail="Incidencia no encontrada o no tienes permiso para verla"
+        )
+
+    asignacion = db.query(Asignacion).filter(
+        Asignacion.id_incidente == id_incidente
+    ).order_by(Asignacion.updated_at.desc()).first()
+
+    if not asignacion or not asignacion.id_usuario:
+        raise HTTPException(
+            status_code=404,
+            detail="Aún no hay técnico asignado a esta incidencia"
+        )
+
+    estado_nombre = (asignacion.estado.nombre if asignacion.estado else "").lower()
+    if estado_nombre not in {"aceptada", "en_camino", "completada"}:
+        raise HTTPException(
+            status_code=404,
+            detail="El técnico todavía no está disponible para seguimiento"
+        )
+
+    ubicacion = db.query(UsuarioTaller).filter(
+        UsuarioTaller.id_usuario == asignacion.id_usuario,
+        UsuarioTaller.id_taller == asignacion.id_taller,
+        UsuarioTaller.activo == True,
+    ).first()
+
+    if not ubicacion or ubicacion.latitud is None or ubicacion.longitud is None:
+        raise HTTPException(
+            status_code=404,
+            detail="El técnico aún no ha compartido su ubicación"
+        )
+
+    tecnico = db.query(Usuario).filter(Usuario.id_usuario == asignacion.id_usuario).first()
+
+    return TecnicoUbicacionResponse(
+        id_incidente=id_incidente,
+        id_asignacion=asignacion.id_asignacion,
+        id_tecnico=asignacion.id_usuario,
+        nombre_tecnico=(tecnico.nombre if tecnico else "Técnico"),
+        estado_asignacion=(asignacion.estado.nombre if asignacion.estado else "desconocido"),
+        latitud_tecnico=ubicacion.latitud,
+        longitud_tecnico=ubicacion.longitud,
+    )
 
 
 # ============ A.3 — CU-10: EVALUAR SERVICIO ============

@@ -17,6 +17,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from app.core.config import get_settings
+from app.db.session import get_db
 import calendar
 
 ph = PasswordHasher()
@@ -93,17 +94,6 @@ _credenciales_exception = HTTPException(
 )
 
 
-def _get_db():
-    """Hace import local de get_db para evitar circular import"""
-    from app.db.session import get_db
-    # Retornar el generador directamente, no la función
-    db = next(get_db())
-    try:
-        yield db
-    finally:
-        db.close()
-
-
 def _decode_token(token: str) -> dict:
     payload = verify_token(token)
     if payload is None:
@@ -113,7 +103,7 @@ def _decode_token(token: str) -> dict:
 
 def get_current_user(
     token: str = Depends(oauth2_scheme),
-    db: Session = Depends(_get_db),
+    db: Session = Depends(get_db),
 ):
     """
     Autentica a un Usuario (cliente / admin) de la app móvil.
@@ -149,7 +139,7 @@ def get_current_user(
 
 def get_current_taller(
     token: str = Depends(oauth2_scheme),
-    db: Session = Depends(_get_db),
+    db: Session = Depends(get_db),
 ):
     """
     Autentica a un Taller (panel web del taller).

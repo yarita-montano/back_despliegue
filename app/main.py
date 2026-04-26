@@ -5,7 +5,11 @@ Punto de entrada: uvicorn app.main:app --reload
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
-from app.api import users_router, talleres_router, vehiculos_router, incidencias_router, evidencias_router, tecnicos_router
+from app.api import (
+    users_router, talleres_router, vehiculos_router,
+    incidencias_router, evidencias_router, tecnicos_router,
+    notificaciones_router, mensajes_router, pagos_router,
+)
 from app.db.session import engine, Base
 # Importar el paquete de modelos registra todas las tablas en Base.metadata
 # antes de llamar a create_all.
@@ -58,6 +62,9 @@ app.include_router(tecnicos_router)
 app.include_router(vehiculos_router)
 app.include_router(incidencias_router)
 app.include_router(evidencias_router)
+app.include_router(notificaciones_router)
+app.include_router(mensajes_router)
+app.include_router(pagos_router)
 
 # Importar y registrar router de diagnóstico
 from app.api.diagnostico import router as diagnostico_router

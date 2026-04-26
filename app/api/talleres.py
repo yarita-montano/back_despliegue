@@ -29,6 +29,7 @@ from app.services.trazabilidad import (
     cambiar_estado_asignacion,
     cambiar_estado_incidente,
 )
+from app.services.notificacion_service import crear_y_enviar_notificacion
 from app.schemas.taller_schema import (
     TallerLoginRequest,
     TallerUpdate,
@@ -416,6 +417,19 @@ def aceptar_asignacion(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Usuario técnico no encontrado o no está activo",
             )
+
+        # Validar que ese técnico pertenezca a este taller
+        from app.models.usuario_taller import UsuarioTaller
+        relacion_tecnico = db.query(UsuarioTaller).filter(
+            UsuarioTaller.id_usuario == payload.id_usuario,
+            UsuarioTaller.id_taller == current_taller.id_taller,
+            UsuarioTaller.activo == True,
+        ).first()
+        if not relacion_tecnico:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="El técnico no pertenece a tu taller o está inactivo",
+            )
         
         # 🔴 VALIDACIÓN CRÍTICA: Un técnico NO puede tener más de una asignación activa a la vez
         asignacion_activa_existente = db.query(Asignacion).filter(
@@ -452,6 +466,50 @@ def aceptar_asignacion(
         cambiar_estado_asignacion(db, asignacion, "aceptada", observacion=observacion)
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+    # Notificaciones: cliente y técnico asignado
+    incidente = db.get(Incidente, asignacion.id_incidente)
+    if incidente and incidente.id_usuario:
+        cliente = db.get(Usuario, incidente.id_usuario)
+        if cliente:
+            mensaje_cliente = f"Tu solicitud fue aceptada por {current_taller.nombre}."
+            if payload.id_usuario is not None:
+                mensaje_cliente += f" Técnico asignado: {tecnico_user.nombre}."
+            if payload.eta_minutos is not None:
+                mensaje_cliente += f" ETA: {payload.eta_minutos} min."
+
+            crear_y_enviar_notificacion(
+                db,
+                titulo="Solicitud aceptada",
+                mensaje=mensaje_cliente,
+                id_usuario=cliente.id_usuario,
+                id_incidente=incidente.id_incidente,
+                push_token=cliente.push_token,
+                data={
+                    "tipo": "asignacion_aceptada",
+                    "id_incidente": str(incidente.id_incidente),
+                    "id_asignacion": str(asignacion.id_asignacion),
+                },
+            )
+
+    if payload.id_usuario is not None:
+        mensaje_tecnico = f"Nueva asignación en {current_taller.nombre}."
+        if payload.eta_minutos is not None:
+            mensaje_tecnico += f" ETA: {payload.eta_minutos} min."
+
+        crear_y_enviar_notificacion(
+            db,
+            titulo="Nueva asignación",
+            mensaje=mensaje_tecnico,
+            id_usuario=tecnico_user.id_usuario,
+            id_incidente=asignacion.id_incidente,
+            push_token=tecnico_user.push_token,
+            data={
+                "tipo": "asignacion_tecnico",
+                "id_incidente": str(asignacion.id_incidente),
+                "id_asignacion": str(asignacion.id_asignacion),
+            },
+        )
 
     db.commit()
     db.refresh(asignacion)
@@ -568,3 +626,41 @@ def mis_evaluaciones(
         .order_by(Evaluacion.created_at.desc())
         .all()
     )
+
+
+# ============ HISTORIAL DE ATENCIONES ============
+
+@router.get(
+    "/mi-taller/historial",
+    response_model=List[AsignacionTallerResponse],
+    summary="Historial de atenciones completadas del taller",
+    description="Retorna todas las asignaciones con estado 'completada' del taller, con paginación.",
+)
+def historial_atenciones(
+    pagina: int = Query(1, ge=1, description="Número de página"),
+    por_pagina: int = Query(20, ge=1, le=100, description="Resultados por página"),
+    desde: Optional[date] = Query(None, description="Fecha inicial (YYYY-MM-DD)"),
+    hasta: Optional[date] = Query(None, description="Fecha final (YYYY-MM-DD)"),
+    db: Session = Depends(get_db),
+    current_taller: Taller = Depends(get_current_taller),
+):
+    q = (
+        db.query(Asignacion)
+        .join(EstadoAsignacion)
+        .filter(
+            Asignacion.id_taller == current_taller.id_taller,
+            EstadoAsignacion.nombre == "completada",
+        )
+    )
+
+    if desde:
+        from datetime import datetime as dt
+        q = q.filter(Asignacion.created_at >= dt.combine(desde, dt.min.time()))
+    if hasta:
+        from datetime import datetime as dt
+        q = q.filter(Asignacion.created_at <= dt.combine(hasta, dt.max.time()))
+
+    total = q.count()
+    items = q.order_by(Asignacion.created_at.desc()).offset((pagina - 1) * por_pagina).limit(por_pagina).all()
+
+    return items
