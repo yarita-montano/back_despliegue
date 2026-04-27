@@ -4,13 +4,19 @@ services:
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn -k uvicorn.workers.UvicornWorker app.main:app
+    # En cada deploy: si SEED_ON_STARTUP=true, resetea la base y la siembra antes
+    # de levantar el server. Útil para proyecto universitario donde queremos
+    # arrancar siempre con datos limpios y consistentes. Pon SEED_ON_STARTUP=false
+    # cuando llegue el momento de congelar los datos.
+    startCommand: bash despliegue/start.sh
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
         sync: false
       - key: SECRET_KEY
         sync: false
+      - key: SEED_ON_STARTUP
+        value: "true"
       - key: CLOUDINARY_CLOUD_NAME
         sync: false
       - key: CLOUDINARY_API_KEY
