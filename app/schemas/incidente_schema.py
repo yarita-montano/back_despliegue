@@ -96,6 +96,7 @@ class CandidatoAsignacionResponse(BaseModel):
     id_taller: int
     distancia_km: Optional[float] = None
     score_total: Optional[float] = None
+    rating_promedio: Optional[float] = None
     seleccionado: bool = False
     
     taller: TallerMini

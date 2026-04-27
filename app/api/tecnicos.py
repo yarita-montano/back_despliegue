@@ -26,6 +26,7 @@ from app.schemas.taller_schema import (
 )
 from app.core.security import get_current_user
 from app.services.trazabilidad import cambiar_estado_asignacion, cambiar_estado_incidente
+from app.services.notificacion_service import crear_y_enviar_notificacion
 
 router = APIRouter(
     prefix="/tecnicos",
@@ -256,8 +257,8 @@ def completar_asignacion(
             ),
         )
 
-    if payload.costo_estimado is not None:
-        asignacion.costo_estimado = payload.costo_estimado
+    if payload.costo_final is not None:
+        asignacion.costo_estimado = payload.costo_final
     if payload.resumen_trabajo is not None:
         prev = asignacion.nota_taller or ""
         asignacion.nota_taller = f"{prev}\n[TRABAJO] {payload.resumen_trabajo}".strip()
@@ -282,6 +283,54 @@ def completar_asignacion(
                 )
             except ValueError as e:
                 raise HTTPException(status_code=500, detail=str(e))
+
+        # Notificar al cliente que ya hay un nuevo pago/cobro para revisar
+        try:
+            cliente = db.get(Usuario, incidente.id_usuario) if incidente.id_usuario else None
+            if payload.costo_final is not None:
+                mensaje = (
+                    f"Tu servicio fue completado. Nuevo pago: Q {payload.costo_final:.2f}. "
+                    "Revisa y realiza el pago en la app."
+                )
+            else:
+                mensaje = "Tu servicio fue completado. Tienes un nuevo pago pendiente por revisar."
+
+            crear_y_enviar_notificacion(
+                db,
+                titulo="Nuevo pago disponible",
+                mensaje=mensaje,
+                id_usuario=incidente.id_usuario,
+                id_incidente=incidente.id_incidente,
+                push_token=cliente.push_token if cliente else None,
+                data={
+                    "tipo": "nuevo_pago",
+                    "id_incidente": str(incidente.id_incidente),
+                    "id_asignacion": str(asignacion.id_asignacion),
+                },
+            )
+        except Exception:
+            # La notificación no debe romper el flujo crítico de cierre
+            pass
+
+        # Notificar al cliente para activar flujo de reseña/calificación del taller
+        try:
+            crear_y_enviar_notificacion(
+                db,
+                titulo="Califica tu servicio",
+                mensaje="Tu servicio finalizó. Cuéntanos tu experiencia y califica al taller.",
+                id_usuario=incidente.id_usuario,
+                id_incidente=incidente.id_incidente,
+                push_token=cliente.push_token if cliente else None,
+                data={
+                    "tipo": "solicitar_resena",
+                    "accion": "calificar_taller",
+                    "id_incidente": str(incidente.id_incidente),
+                    "id_asignacion": str(asignacion.id_asignacion),
+                },
+            )
+        except Exception:
+            # La notificación no debe romper el flujo crítico de cierre
+            pass
 
     db.commit()
     db.refresh(asignacion)

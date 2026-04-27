@@ -15,7 +15,7 @@ from typing import List
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 
-from app.models.incidente import Incidente, CandidatoAsignacion, Asignacion
+from app.models.incidente import Incidente, CandidatoAsignacion, Asignacion, Evaluacion
 from app.models.taller import Taller, TallerServicio
 from app.models.usuario import Usuario
 from app.models.catalogos import EstadoAsignacion
@@ -101,6 +101,15 @@ def _contar_asignaciones_activas_usuario_tecnico(db: Session, id_usuario: int) -
     ).count()
     
     return count
+
+
+def _obtener_rating_promedio_taller(db: Session, id_taller: int) -> float | None:
+    """Calcula el promedio de estrellas del taller desde sus evaluaciones."""
+    rating = db.query(func.avg(Evaluacion.estrellas)).filter(
+        Evaluacion.id_taller == id_taller
+    ).scalar()
+
+    return round(float(rating), 2) if rating is not None else None
 
 
 def validar_usuario_tecnico_disponible(db: Session, id_usuario: int) -> bool:
@@ -236,11 +245,14 @@ def buscar_y_asignar(db: Session, incidente: Incidente) -> dict:
             score_capacidad * 0.30 +
             score_disponibilidad * 0.30
         ) * 100
+
+        rating_promedio = _obtener_rating_promedio_taller(db, taller.id_taller)
         
         candidatos_con_score.append({
             "taller": taller,
             "distancia_km": round(distancia, 2),
             "score_total": round(score_total, 2),
+            "rating_promedio": rating_promedio,
             "asignaciones_activas": asignaciones_activas,
             "tecnicos_disponibles": tecnicos_disponibles,
         })

@@ -62,6 +62,10 @@ class Asignacion(Base):
     estado = relationship("EstadoAsignacion")
     historiales = relationship("HistorialEstadoAsignacion", back_populates="asignacion", cascade="all, delete-orphan")
 
+    @property
+    def costo_final(self):
+        return self.costo_estimado
+
 
 class Evidencia(Base):
     __tablename__ = "evidencia"
@@ -129,6 +133,19 @@ class CandidatoAsignacion(Base):
     incidente = relationship("Incidente", back_populates="candidatos")
     taller = relationship("Taller")
 
+    @property
+    def rating_promedio(self):
+        evaluaciones = getattr(self.taller, "evaluaciones", None)
+        if not evaluaciones:
+            return None
+
+        total = sum(e.estrellas for e in evaluaciones if e.estrellas is not None)
+        cantidad = sum(1 for e in evaluaciones if e.estrellas is not None)
+        if cantidad == 0:
+            return None
+
+        return round(total / cantidad, 2)
+
 
 class Evaluacion(Base):
     """
@@ -149,4 +166,4 @@ class Evaluacion(Base):
 
     incidente = relationship("Incidente")
     usuario = relationship("Usuario")
-    taller = relationship("Taller")
+    taller = relationship("Taller", back_populates="evaluaciones")

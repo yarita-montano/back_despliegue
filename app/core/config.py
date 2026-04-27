@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     # Firebase Cloud Messaging
     FIREBASE_CREDENTIALS_PATH: str = ""
 
+    # Stripe
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
+
     class Config:
         # El archivo .env está en la raíz del proyecto Backend
         env_file = ".env"

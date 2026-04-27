@@ -37,6 +37,7 @@ class Taller(Base):
     servicios = relationship("TallerServicio", back_populates="taller", cascade="all, delete-orphan")
     usuarios_tecnicos = relationship("UsuarioTaller", back_populates="taller", cascade="all, delete-orphan")
     asignaciones = relationship("Asignacion", back_populates="taller")
+    evaluaciones = relationship("Evaluacion", back_populates="taller", cascade="all, delete-orphan")
 
 
 class TallerServicio(Base):

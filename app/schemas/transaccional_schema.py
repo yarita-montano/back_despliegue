@@ -68,7 +68,24 @@ class PagoResponse(BaseModel):
         from_attributes = True
 
 
+class PagoClienteItem(BaseModel):
+    id_incidente: int
+    id_pago: Optional[int] = None
+    monto_total: float
+    estado: str
+    referencia_externa: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
 class StripeIntentResponse(BaseModel):
     client_secret: str
     payment_intent_id: str
     monto_centavos: int
+
+
+class ConfirmarPagoAppRequest(BaseModel):
+    payment_intent_id: str = Field(..., min_length=5, description="ID del PaymentIntent de Stripe")

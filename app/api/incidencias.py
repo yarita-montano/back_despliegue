@@ -171,6 +171,18 @@ def reportar_incidencia(
             detail="El vehículo no existe o no te pertenece"
         )
 
+    # ✅ VALIDACIÓN 2: Límite por Usuario (Un solo incidente activo a la vez)
+    incidente_activo = db.query(Incidente).filter(
+        Incidente.id_usuario == current_user.id_usuario,
+        Incidente.id_estado.in_([1, 2])  # 1: pendiente, 2: en_proceso
+    ).first()
+
+    if incidente_activo:
+        raise HTTPException(
+            status_code=400,
+            detail="Ya tienes una emergencia en curso. Por favor, espera a que finalice o cancélala antes de reportar otra."
+        )
+
     # ✅ CREAR INCIDENTE
     nuevo_incidente = Incidente(
         id_usuario=current_user.id_usuario,  # 🔒 Del JWT, no es modificable

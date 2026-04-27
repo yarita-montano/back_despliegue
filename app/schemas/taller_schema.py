@@ -5,7 +5,7 @@ Importante:
 - El Taller se autentica por su propia cuenta (email + password).
 - El Técnico NO se autentica: es solo un registro operativo del taller.
 """
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from typing import Optional, List
 from datetime import datetime
 
@@ -110,8 +110,15 @@ class IniciarViajeRequest(BaseModel):
 
 
 class CompletarAsignacionRequest(BaseModel):
-    """Servicio completado (en_camino → completada). Taller reporta costo y detalles del trabajo."""
-    costo_estimado: Optional[float] = Field(None, ge=0, description="Costo final acordado (se guarda en asignacion.costo_estimado)")
+    """Servicio completado (en_camino → completada). El técnico reporta el cobro final y detalles del trabajo."""
+    model_config = ConfigDict(populate_by_name=True)
+
+    costo_final: Optional[float] = Field(
+        None,
+        ge=0,
+        alias="costo_estimado",
+        description="Cobro final acordado; se guarda en asignacion.costo_estimado por compatibilidad",
+    )
     resumen_trabajo: Optional[str] = Field(None, max_length=1000, description="Descripción del trabajo realizado")
 
 
@@ -211,6 +218,8 @@ class AsignacionTallerResponse(BaseModel):
     id_usuario: Optional[int] = None  # Usuario técnico asignado
     id_estado_asignacion: int
     eta_minutos: Optional[int] = None
+    costo_estimado: Optional[float] = None
+    costo_final: Optional[float] = None
     nota_taller: Optional[str] = None
     created_at: datetime
     updated_at: datetime
@@ -243,6 +252,8 @@ class TecnicoAsignacionResponse(BaseModel):
     id_usuario: int  # Usuario técnico
     id_taller: int
     eta_minutos: Optional[int] = None
+    costo_estimado: Optional[float] = None
+    costo_final: Optional[float] = None
     nota_taller: Optional[str] = None
     created_at: datetime
     updated_at: datetime

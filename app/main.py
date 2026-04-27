@@ -9,6 +9,7 @@ from app.api import (
     users_router, talleres_router, vehiculos_router,
     incidencias_router, evidencias_router, tecnicos_router,
     notificaciones_router, mensajes_router, pagos_router,
+    admin_router,
 )
 from app.db.session import engine, Base
 # Importar el paquete de modelos registra todas las tablas en Base.metadata
@@ -65,6 +66,7 @@ app.include_router(evidencias_router)
 app.include_router(notificaciones_router)
 app.include_router(mensajes_router)
 app.include_router(pagos_router)
+app.include_router(admin_router)
 
 # Importar y registrar router de diagnóstico
 from app.api.diagnostico import router as diagnostico_router

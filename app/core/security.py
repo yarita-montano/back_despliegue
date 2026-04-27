@@ -137,6 +137,21 @@ def get_current_user(
     return usuario
 
 
+def get_current_admin(
+    current_user=Depends(get_current_user),
+):
+    """
+    Requiere rol de administrador (id_rol=4).
+    Úsalo como dependencia en cualquier endpoint exclusivo de admin.
+    """
+    if current_user.id_rol != 4:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Se requieren permisos de administrador",
+        )
+    return current_user
+
+
 def get_current_taller(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
