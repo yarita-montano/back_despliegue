@@ -6,6 +6,7 @@ argon2-cffi-bindings==25.1.0
 bcrypt==5.0.0
 cffi==2.0.0
 click==8.3.2
+cloudinary==1.41.0
 colorama==0.4.6
 cryptography==46.0.7
 dnspython==2.8.0
