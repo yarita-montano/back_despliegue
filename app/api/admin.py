@@ -20,10 +20,12 @@ from typing import List, Optional
 
 from app.db.session import get_db
 from app.models.taller import Taller
+from app.models.user_model import Usuario
 from app.models.incidente import Asignacion, Evaluacion
 from app.models.transaccional import Pago
 from app.models.catalogos import EstadoAsignacion, EstadoPago
 from app.core.security import get_current_admin, hash_password
+from app.services.notificacion_service import crear_y_enviar_notificacion
 from app.schemas.admin_schema import (
     TallerAdminCreate,
     TallerAdminResponse,
@@ -372,3 +374,39 @@ def ganancias_por_taller(
         filtro_año=año,
         filtro_mes=mes,
     )
+
+
+# ── NOTIFICACIONES DE PRUEBA ──────────────────────────────────────────────────
+
+@router.post(
+    "/usuarios/{id_usuario}/notificacion-prueba",
+    summary="Enviar notificación de prueba a un usuario",
+    status_code=status.HTTP_200_OK,
+)
+def enviar_notificacion_prueba(
+    id_usuario: int,
+    db: Session = Depends(get_db),
+    _admin=Depends(get_current_admin),
+):
+    usuario = db.query(Usuario).filter(Usuario.id_usuario == id_usuario).first()
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    notif = crear_y_enviar_notificacion(
+        db,
+        titulo="🔔 Notificación de prueba",
+        mensaje="Esta es una notificación de prueba enviada desde el panel de administración.",
+        id_usuario=id_usuario,
+        push_token=usuario.push_token,
+        data={"tipo": "prueba"},
+    )
+    db.commit()
+
+    return {
+        "id_notificacion": notif.id_notificacion,
+        "usuario": usuario.nombre,
+        "email": usuario.email,
+        "push_token": usuario.push_token,
+        "enviado_push": notif.enviado_push,
+        "mensaje": "Notificación creada en BD" + (" y push enviado" if notif.enviado_push else " (push desactivado: sin credenciales Firebase)"),
+    }
