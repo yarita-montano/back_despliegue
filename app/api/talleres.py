@@ -355,6 +355,9 @@ def listar_asignaciones(
     current_taller: Taller = Depends(get_current_taller),
 ):
     q = db.query(Asignacion).filter(Asignacion.id_taller == current_taller.id_taller)
+
+    # Evitar solicitudes de incidentes cancelados en cualquier estado
+    q = q.join(Incidente).join(EstadoIncidente).filter(EstadoIncidente.nombre != "cancelado")
     
     # Filtrar por estado
     if estado:

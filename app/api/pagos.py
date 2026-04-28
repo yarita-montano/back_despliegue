@@ -70,6 +70,14 @@ def _load_stripe_api_key() -> None:
     stripe.api_key = _require_stripe_secret_key()
 
 
+def _aplicar_comision(pago: Pago) -> None:
+    """Aplica comision del 10% y recalcula monto del taller."""
+    monto = float(pago.monto_total or 0)
+    comision = round(monto * 0.10, 2)
+    pago.comision_plataforma = comision
+    pago.monto_taller = round(monto - comision, 2)
+
+
 def _actualizar_pago_desde_intent(
     db: Session,
     payment_intent: dict,
@@ -119,12 +127,16 @@ def _actualizar_pago_desde_intent(
             monto_taller=monto_total,
             referencia_externa=referencia,
         )
+        if estado_nombre == "completado":
+            _aplicar_comision(pago)
         db.add(pago)
         return
 
     pago.id_estado_pago = _get_estado_pago_id(db, estado_nombre)
     if referencia:
         pago.referencia_externa = referencia
+    if estado_nombre == "completado":
+        _aplicar_comision(pago)
 
 
 @router.post(
@@ -310,6 +322,8 @@ def confirmar_pago_app(
                 detail="No puedes confirmar un pago que no te pertenece",
             )
         pago.id_estado_pago = _get_estado_pago_id(db, estado_nombre)
+        if estado_nombre == "completado":
+            _aplicar_comision(pago)
         db.commit()
 
     return {"estado": estado_nombre, "payment_intent_status": intent.status}
