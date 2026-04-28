@@ -466,6 +466,51 @@ def obtener_ubicacion_tecnico(
     )
 
 
+# ============ CANCELAR INCIDENTE ============
+
+@router.patch(
+    "/{id_incidente}/cancelar",
+    response_model=IncidenteDetalle,
+    summary="Cancelar un incidente activo",
+    description="El cliente cancela un incidente propio en estado pendiente o en_proceso.",
+)
+def cancelar_incidente(
+    id_incidente: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    from app.models.incidente import HistorialEstadoIncidente
+
+    incidente = db.query(Incidente).filter(
+        Incidente.id_incidente == id_incidente,
+        Incidente.id_usuario == current_user.id_usuario,
+    ).first()
+    if not incidente:
+        raise HTTPException(status_code=404, detail="Incidente no encontrado o no te pertenece")
+
+    estado_actual = db.get(EstadoIncidente, incidente.id_estado)
+    if not estado_actual or estado_actual.nombre not in ("pendiente", "en_proceso"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Solo puedes cancelar incidentes pendientes o en proceso. Estado actual: '{estado_actual.nombre if estado_actual else '?'}'.",
+        )
+
+    estado_cancelado = db.query(EstadoIncidente).filter_by(nombre="cancelado").first()
+    if not estado_cancelado:
+        raise HTTPException(status_code=500, detail="Estado 'cancelado' no encontrado en catálogo")
+
+    db.add(HistorialEstadoIncidente(
+        id_incidente=incidente.id_incidente,
+        id_estado_anterior=incidente.id_estado,
+        id_estado_nuevo=estado_cancelado.id_estado,
+        observacion="Cancelado por el cliente",
+    ))
+    incidente.id_estado = estado_cancelado.id_estado
+    db.commit()
+    db.refresh(incidente)
+    return incidente
+
+
 # ============ A.3 — CU-10: EVALUAR SERVICIO ============
 
 @router.post(
