@@ -1,0 +1,43 @@
+services:
+  - type: web
+    name: emergencias-vehiculares-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    # En cada deploy: si SEED_ON_STARTUP=true, resetea la base y la siembra antes
+    # de levantar el server. Útil para proyecto universitario donde queremos
+    # arrancar siempre con datos limpios y consistentes. Pon SEED_ON_STARTUP=false
+    # cuando llegue el momento de congelar los datos.
+    startCommand: bash despliegue/start.sh
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: SEED_ON_STARTUP
+        value: "true"
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: AUTO_CREATE_TABLES
+        value: "false"
+      - key: DEBUG
+        value: "false"
+      - key: AWS_REGION
+        value: "us-east-1"
+      - key: BEDROCK_MODEL_ID
+        value: "us.amazon.nova-pro-v1:0"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: "gemini-3-flash-preview"
+      - key: FIREBASE_CREDENTIALS_PATH
+        value: ""
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false

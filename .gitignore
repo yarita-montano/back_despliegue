@@ -1,0 +1,123 @@
+# ---------------------------------------------------------------------------
+# Entornos virtuales
+# ---------------------------------------------------------------------------
+venv/
+venv*/
+.venv
+env/
+ENV/
+
+# ---------------------------------------------------------------------------
+# Variables de entorno
+# Contienen secretos de ejecucion; nunca deben versionarse.
+# ---------------------------------------------------------------------------
+.env
+.env.local
+.env.*.local
+
+# ---------------------------------------------------------------------------
+# Credenciales de servicios externos
+# Claves de Firebase, Google, Stripe, etc. Nunca deben versionarse.
+# ---------------------------------------------------------------------------
+firebase-credentials.json
+google-services.json
+google-services*.json
+serviceAccountKey*.json
+*.pem
+*.key
+secrets/
+
+# ---------------------------------------------------------------------------
+# Scripts locales de desarrollo y diagnostico
+# Utilidades puntuales (seed, debug, verificacion, pruebas manuales) que no
+# forman parte del runtime de la aplicacion. Se conservan en disco pero no
+# se versionan. La suite de pruebas formal vive en tests/ y si se versiona.
+# ---------------------------------------------------------------------------
+/check_*.py
+/create_*.py
+/debug_*.py
+/diagnostico_*.py
+/run_motor_asignacion.py
+/seed_*.py
+/verify_*.py
+/test_*.py
+/init_database.py
+
+# ---------------------------------------------------------------------------
+# Editores e IDE
+# ---------------------------------------------------------------------------
+.vscode/
+.idea/
+.claude/settings.local.json
+*.swp
+*.swo
+*~
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# ---------------------------------------------------------------------------
+# Pruebas y cobertura
+# ---------------------------------------------------------------------------
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ---------------------------------------------------------------------------
+# Bases de datos locales
+# ---------------------------------------------------------------------------
+*.db
+*.sqlite
+*.sqlite3
+
+# ---------------------------------------------------------------------------
+# Logs
+# ---------------------------------------------------------------------------
+*.log
+logs/
+
+# ---------------------------------------------------------------------------
+# Sistema operativo
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+
+# ---------------------------------------------------------------------------
+# Archivos temporales
+# ---------------------------------------------------------------------------
+*.tmp
+*.bak
+.temp/
+
+# ---------------------------------------------------------------------------
+# Documentacion interna
+# El codigo es la fuente de verdad: no se versiona documentacion en Markdown
+# ni las carpetas de guias. Se conserva CREDENCIALES.txt por decision del
+# proyecto. requirements.txt se versiona por ser el manifiesto de dependencias.
+# ---------------------------------------------------------------------------
+*.md
+guias/
+guias2/
+diagramas base de datos/
+comando.txt
+transcripcion_completa.txt
