@@ -48,7 +48,7 @@ secrets/
 # ---------------------------------------------------------------------------
 .vscode/
 .idea/
-.claude/settings.local.json
+.claude/
 *.swp
 *.swo
 *~
