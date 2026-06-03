@@ -62,11 +62,22 @@ def run(db: Session, ctx: Ctx) -> None:
             if not cat:
                 logger.info(f"[entidades]   (skip categoria '{cat_nombre}')")
                 continue
+            # Tiempo estimado de reparacion por tipo de servicio (en minutos),
+            # para que la pantalla de seleccion de taller muestre "Reparacion: ...".
+            tiempo_rep_min = {
+                "bateria": 20, "llanta": 20, "Servicio de llantas": 25,
+                "llaves": 30, "Grua / Auxilio vial": 30,
+                "Servicio electronico": 45, "Servicio electrico": 50,
+                "Servicio rutinario": 60, "otros": 60, "incierto": 60,
+                "Mecanica general": 90, "motor": 120,
+                "choque": 180, "Chaperia y pintura": 240,
+            }.get(cat_nombre, 60)
             db.add(TallerServicio(
                 id_taller=taller.id_taller,
                 id_categoria=cat.id_categoria,
                 servicio_movil=True,
                 tarifa_base=80.00,
+                tiempo_estimado_min=tiempo_rep_min,
             ))
 
         ctx.talleres.append(taller)
