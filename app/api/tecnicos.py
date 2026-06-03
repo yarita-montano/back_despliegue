@@ -426,22 +426,32 @@ def listar_evidencias(
             detail="Solo técnicos pueden usar este endpoint",
         )
 
-    asignacion = db.query(Asignacion).filter(
-        Asignacion.id_asignacion == id_asignacion,
-        Asignacion.id_usuario == current_user.id_usuario,
-    ).first()
+    # Las evidencias las sube el cliente en el flujo público (sin tenant en
+    # contexto), por lo que se persisten con id_tenant NULL. El filtro global
+    # está instalado con include_legacy=False, así que una consulta tenant-scoped
+    # (token del técnico con id_tenant=N) las excluiría. Se usa el escape-hatch de
+    # super-admin (set(0)) acotado a esta lectura; la autorización se mantiene por
+    # id_usuario (dueño de la asignación), no por tenant.
+    tok = current_tenant.set(0)
+    try:
+        asignacion = db.query(Asignacion).filter(
+            Asignacion.id_asignacion == id_asignacion,
+            Asignacion.id_usuario == current_user.id_usuario,
+        ).first()
 
-    if not asignacion:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Asignación no encontrada o no asignada a ti",
-        )
+        if not asignacion:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Asignación no encontrada o no asignada a ti",
+            )
 
-    evidencias = db.query(Evidencia).filter(
-        Evidencia.id_incidente == asignacion.id_incidente
-    ).all()
+        evidencias = db.query(Evidencia).filter(
+            Evidencia.id_incidente == asignacion.id_incidente
+        ).all()
 
-    return evidencias
+        return evidencias
+    finally:
+        current_tenant.reset(tok)
 
 
 # A.2 — CU-20: transiciones en_camino y completada
@@ -551,8 +561,14 @@ def completar_asignacion(
             ),
         )
 
-    if payload.costo_final is not None:
-        asignacion.costo_estimado = payload.costo_final
+    # El monto final es obligatorio: sin el se generaba un cobro de $0 que el
+    # cliente no podia pagar (la pasarela exige monto_total > 0).
+    if payload.costo_final is None or payload.costo_final <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Debes ingresar el monto final del servicio (mayor a 0).",
+        )
+    asignacion.costo_estimado = payload.costo_final
     if payload.resumen_trabajo is not None:
         prev = asignacion.nota_taller or ""
         asignacion.nota_taller = f"{prev}\n[TRABAJO] {payload.resumen_trabajo}".strip()

@@ -550,7 +550,7 @@ def obtener_asignacion(
     summary="Aceptar una asignación",
     description="El taller confirma que se hará cargo del incidente. Pasa a estado 'aceptada'.",
 )
-def aceptar_asignacion(
+async def aceptar_asignacion(
     id_asignacion: int,
     payload: AceptarAsignacionRequest,
     db: Session = Depends(get_db),
@@ -610,7 +610,23 @@ def aceptar_asignacion(
         
         asignacion.id_usuario = payload.id_usuario
 
-    if payload.eta_minutos is not None:
+    # El ETA NO lo escribe el taller: se CALCULA (distancia taller -> incidente),
+    # el mismo tiempo que se le muestra al cliente al elegir taller. Asi lo que ve
+    # el cliente y la base del SLA quedan coherentes.
+    incidente_eta = db.get(Incidente, asignacion.id_incidente)
+    if (
+        incidente_eta is not None
+        and incidente_eta.latitud is not None and incidente_eta.longitud is not None
+        and current_taller.latitud is not None and current_taller.longitud is not None
+    ):
+        from app.services.tracking_service import VELOCIDAD_DEFAULT_KMH
+        d_km = _haversine_km(
+            current_taller.latitud, current_taller.longitud,
+            incidente_eta.latitud, incidente_eta.longitud,
+        )
+        asignacion.eta_minutos = max(1, int(round((d_km / VELOCIDAD_DEFAULT_KMH) * 60)))
+    elif payload.eta_minutos is not None:
+        # Fallback solo si faltan coordenadas para calcularlo.
         asignacion.eta_minutos = payload.eta_minutos
     if payload.nota:
         asignacion.nota_taller = payload.nota
@@ -668,6 +684,22 @@ def aceptar_asignacion(
                 "tipo": "asignacion_tecnico",
                 "id_incidente": str(asignacion.id_incidente),
                 "id_asignacion": str(asignacion.id_asignacion),
+            },
+        )
+
+        # Notificar al técnico en tiempo real por WebSocket (canal usuario:{id})
+        # para que su dashboard se actualice sin recargar. Es best-effort (no
+        # transaccional), por eso se emite aquí mismo antes del commit.
+        from app.services.notify_service import notify_usuario
+        await notify_usuario(
+            tecnico_user.id_usuario,
+            "asignacion.asignada",
+            {
+                "id_asignacion": asignacion.id_asignacion,
+                "id_incidente": asignacion.id_incidente,
+                "id_taller": current_taller.id_taller,
+                "taller_nombre": current_taller.nombre,
+                "eta_minutos": asignacion.eta_minutos,
             },
         )
 
