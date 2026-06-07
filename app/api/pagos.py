@@ -72,10 +72,14 @@ def _load_stripe_api_key() -> None:
     stripe.api_key = _require_stripe_secret_key()
 
 
-def _aplicar_comision(pago: Pago) -> None:
-    """Aplica comision del 10% y recalcula monto del taller."""
+def _aplicar_comision(db: Session, pago: Pago) -> None:
+    """Aplica la comision configurable de la plataforma y recalcula el monto del
+    taller. El % se lee de la configuracion global (admin); antes era 10% fijo."""
+    from app.services.pago_service import get_configuracion
+
     monto = float(pago.monto_total or 0)
-    comision = round(monto * 0.10, 2)
+    pct = float(get_configuracion(db).comision_plataforma_pct or 0)
+    comision = round(monto * pct / 100, 2)
     pago.comision_plataforma = comision
     pago.monto_taller = round(monto - comision, 2)
 
@@ -130,7 +134,7 @@ def _actualizar_pago_desde_intent(
             referencia_externa=referencia,
         )
         if estado_nombre == "completado":
-            _aplicar_comision(pago)
+            _aplicar_comision(db, pago)
         db.add(pago)
         return
 
@@ -138,7 +142,7 @@ def _actualizar_pago_desde_intent(
     if referencia:
         pago.referencia_externa = referencia
     if estado_nombre == "completado":
-        _aplicar_comision(pago)
+        _aplicar_comision(db, pago)
 
 
 @router.post(
@@ -335,7 +339,7 @@ def confirmar_pago_app(
             )
         pago.id_estado_pago = _get_estado_pago_id(db, estado_nombre)
         if estado_nombre == "completado":
-            _aplicar_comision(pago)
+            _aplicar_comision(db, pago)
         db.commit()
 
     return {"estado": estado_nombre, "payment_intent_status": intent.status}

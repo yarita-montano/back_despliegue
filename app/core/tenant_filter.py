@@ -27,6 +27,12 @@ from app.core.tenant_context import current_tenant
 
 _INSTALLED = False
 
+# Modelos exentos del filtro global de tenant: su acceso lo controla el endpoint
+# por incidente, no el tenant. Mensaje (chat cliente<->taller por incidente) debe
+# verse completo aunque la asignacion se reasigne a un taller de otro tenant; sin
+# esto, los mensajes con id_tenant NULL quedan ocultos al taller.
+_MODELOS_SIN_FILTRO_TENANT = {"Mensaje"}
+
 
 def install_tenant_filter(include_legacy: bool = True) -> None:
     """
@@ -57,6 +63,10 @@ def install_tenant_filter(include_legacy: bool = True) -> None:
 
         for mapper in Base.registry.mappers:
             cls = mapper.class_
+            # Mensaje queda fuera del filtro: el chat por incidente debe ser
+            # visible para cualquier taller asignado (el endpoint valida acceso).
+            if cls.__name__ in _MODELOS_SIN_FILTRO_TENANT:
+                continue
             if "id_tenant" not in mapper.columns:
                 continue
 

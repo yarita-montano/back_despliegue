@@ -114,6 +114,24 @@ def obtener_mi_taller(current_taller: Taller = Depends(get_current_taller)):
     return current_taller
 
 
+@router.get(
+    "/mi-taller/tarifas",
+    summary="Tarifas vigentes (info para el taller)",
+)
+def tarifas_vigentes(
+    db: Session = Depends(get_db),
+    current_taller: Taller = Depends(get_current_taller),
+):
+    """Valores globales (configurados por el super-admin) que afectan lo que
+    recibe el taller: comision de la plataforma."""
+    from app.services.pago_service import get_configuracion
+
+    config = get_configuracion(db)
+    return {
+        "comision_plataforma_pct": config.comision_plataforma_pct,
+    }
+
+
 @router.put("/mi-taller", response_model=TallerResponse, summary="Editar mi taller")
 def editar_mi_taller(
     taller_update: TallerUpdate,

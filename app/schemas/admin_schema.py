@@ -111,3 +111,18 @@ class GananciaPorTallerResponse(BaseModel):
     total_monto: float
     filtro_año: Optional[int] = None
     filtro_mes: Optional[int] = None
+
+
+# Configuracion global de la plataforma (super-admin)
+
+class ConfiguracionResponse(BaseModel):
+    """Parametros globales que aplican a TODOS los talleres."""
+    comision_plataforma_pct: int = Field(10, description="% que la plataforma retiene de cada servicio")
+
+    class Config:
+        from_attributes = True
+
+
+class ConfiguracionUpdate(BaseModel):
+    """Actualizacion parcial: solo se aplican los campos enviados."""
+    comision_plataforma_pct: Optional[int] = Field(None, ge=0, le=100)

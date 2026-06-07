@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models.catalogos import EstadoPago, MetodoPago
+from app.models.configuracion import ConfiguracionPlataforma
 from app.models.cotizacion import Cotizacion, EstadoCotizacion
 from app.models.incidente import Asignacion, Incidente
 from app.models.taller import TallerServicio
@@ -25,9 +26,31 @@ from app.models.transaccional import Pago
 
 
 PENALIZACION_FIJA_USD = Decimal("5.00")
+COMISION_DEFAULT_PCT = 10
 ESTIMACION_FALLBACK_USD = Decimal("20.00")
 ESTIMACION_HISTORICO_DIAS = 90
 ESTIMACION_HISTORICO_MINIMO = 3
+
+
+def get_configuracion(db: Session) -> ConfiguracionPlataforma:
+    """Devuelve la configuracion global singleton de la plataforma.
+
+    Si la fila no existe (p. ej. tras un reseed que hace TRUNCATE) la crea con
+    los valores por defecto (comision 10%) y hace flush. No hace commit: la
+    transaccion la cierra quien invoca.
+    """
+    config = (
+        db.query(ConfiguracionPlataforma)
+        .order_by(ConfiguracionPlataforma.id.asc())
+        .first()
+    )
+    if config is None:
+        config = ConfiguracionPlataforma(
+            comision_plataforma_pct=COMISION_DEFAULT_PCT,
+        )
+        db.add(config)
+        db.flush()
+    return config
 
 
 def _estado_pago_id(db: Session, nombre: str) -> int:
