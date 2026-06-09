@@ -867,7 +867,19 @@ def cancelar_incidente(
         .first()
     )
 
+    print(
+        f"[CANCELACION][incidencias] PATCH /incidencias/{id_incidente}/cancelar "
+        f"user={current_user.id_usuario} estado_inc={estado_actual.nombre} "
+        f"asignacion_activa={asignacion_activa.id_asignacion if asignacion_activa else None}",
+        flush=True,
+    )
+
     if asignacion_activa:
+        print(
+            f"[CANCELACION][incidencias] -> delega a cancelar_asignacion "
+            f"(con compensacion) asig={asignacion_activa.id_asignacion}",
+            flush=True,
+        )
         cancelacion_service.cancelar_asignacion(
             db=db,
             asignacion=asignacion_activa,
@@ -879,6 +891,11 @@ def cancelar_incidente(
 
     # Sin asignacion activa (p.ej. 'pendiente' sin taller asignado todavia):
     # solo se cierra el incidente, sin compensacion.
+    print(
+        f"[CANCELACION][incidencias] -> SIN asignacion activa: cierra incidente "
+        f"{id_incidente} sin compensacion",
+        flush=True,
+    )
     estado_cancelado = db.query(EstadoIncidente).filter_by(nombre="cancelado").first()
     if not estado_cancelado:
         raise HTTPException(status_code=500, detail="Estado 'cancelado' no encontrado en catálogo")

@@ -33,10 +33,19 @@ def cancelar_asignacion_endpoint(
     # y el filtro multi-tenant ocultaria la cotizacion al calcular la compensacion
     # (la base quedaria en 0 y no se crearia el Pago). La autorizacion la da el
     # chequeo de dueno dentro de cancelar_asignacion.
+    print(
+        f"[CANCELACION][asignaciones] POST /asignaciones/{id_asignacion}/cancelar "
+        f"user={current_user.id_usuario} motivo={body.motivo!r}",
+        flush=True,
+    )
     token = current_tenant.set(0)
     try:
         asig = db.query(Asignacion).get(id_asignacion)
         if not asig:
+            print(
+                f"[CANCELACION][asignaciones] asignacion {id_asignacion} NO existe -> 404",
+                flush=True,
+            )
             raise HTTPException(404, "Asignacion no existe")
 
         asig_actualizada, nuevo_estado = cancelacion_service.cancelar_asignacion(
@@ -47,6 +56,12 @@ def cancelar_asignacion_endpoint(
         )
     finally:
         current_tenant.reset(token)
+    print(
+        f"[CANCELACION][asignaciones] RESPUESTA asig={asig_actualizada.id_asignacion} "
+        f"estado={nuevo_estado} compensacion={asig_actualizada.compensacion_monto} "
+        f"pagada={asig_actualizada.compensacion_pagada}",
+        flush=True,
+    )
     return CancelacionResponse(
         id_asignacion=asig_actualizada.id_asignacion,
         id_taller=asig_actualizada.id_taller,
