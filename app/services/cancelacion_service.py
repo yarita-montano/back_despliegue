@@ -5,6 +5,7 @@ from decimal import Decimal
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.tenant_context import current_tenant
 from app.models.catalogos import EstadoAsignacion, EstadoIncidente, EstadoPago, MetodoPago
 from app.models.cotizacion import Cotizacion
 from app.models.incidente import (
@@ -63,26 +64,31 @@ def cancelar_asignacion(
     if estado_actual in ESTADOS_NO_CANCELABLES:
         raise HTTPException(409, f"No se puede cancelar una asignacion '{estado_actual}'")
 
-    # El tenant configura los porcentajes desde admin
-    tenant = db.query(Tenant).filter_by(id_tenant=asignacion.id_tenant).first()
+    # El tenant (porcentajes) y la cotizacion (base) se leen SIEMPRE con tenant=0:
+    # el incidente del cliente puede tener id_tenant distinto/NULL al del taller,
+    # y el filtro multi-tenant ocultaria ambos (factor por defecto + base 0). Asi
+    # la compensacion se calcula bien sin importar desde que endpoint se cancele.
+    # OJO: asignacion.costo_estimado SOLO se llena al COMPLETAR el servicio, asi
+    # que en una cancelacion en curso suele estar en None; la base real es el
+    # monto_total de la cotizacion (una por incidente+taller).
+    _tok = current_tenant.set(0)
+    try:
+        tenant = db.query(Tenant).filter_by(id_tenant=asignacion.id_tenant).first()
+        cotizacion = (
+            db.query(Cotizacion)
+            .filter(
+                Cotizacion.id_incidente == asignacion.id_incidente,
+                Cotizacion.id_taller == asignacion.id_taller,
+            )
+            .first()
+        )
+    finally:
+        current_tenant.reset(_tok)
+
     factor = _factor_compensacion(tenant, estado_actual)
     if factor is None:
         raise HTTPException(500, f"Estado '{estado_actual}' sin regla de compensacion")
 
-    # La compensacion es un porcentaje de la cotizacion que acepto el cliente.
-    # OJO: asignacion.costo_estimado SOLO se llena al COMPLETAR el servicio
-    # (costo_final del tecnico), asi que en una cancelacion en curso siempre esta
-    # en None y la base daria 0. La cotizacion real vive en la tabla cotizacion
-    # (una por incidente+taller). Tomamos su monto_total y caemos a costo_estimado
-    # solo si no hubo cotizacion (categorias de servicio directo).
-    cotizacion = (
-        db.query(Cotizacion)
-        .filter(
-            Cotizacion.id_incidente == asignacion.id_incidente,
-            Cotizacion.id_taller == asignacion.id_taller,
-        )
-        .first()
-    )
     if cotizacion is not None and cotizacion.monto_total > 0:
         base = Decimal(str(cotizacion.monto_total))
     else:
