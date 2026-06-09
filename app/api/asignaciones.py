@@ -28,20 +28,25 @@ def cancelar_asignacion_endpoint(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(get_current_user),
 ):
+    # Toda la cancelacion corre con tenant=0: el incidente del cliente puede
+    # tener id_tenant distinto (o NULL) al de la cotizacion/asignacion del taller,
+    # y el filtro multi-tenant ocultaria la cotizacion al calcular la compensacion
+    # (la base quedaria en 0 y no se crearia el Pago). La autorizacion la da el
+    # chequeo de dueno dentro de cancelar_asignacion.
     token = current_tenant.set(0)
     try:
         asig = db.query(Asignacion).get(id_asignacion)
+        if not asig:
+            raise HTTPException(404, "Asignacion no existe")
+
+        asig_actualizada, nuevo_estado = cancelacion_service.cancelar_asignacion(
+            db=db,
+            asignacion=asig,
+            usuario=current_user,
+            motivo=body.motivo,
+        )
     finally:
         current_tenant.reset(token)
-    if not asig:
-        raise HTTPException(404, "Asignacion no existe")
-
-    asig_actualizada, nuevo_estado = cancelacion_service.cancelar_asignacion(
-        db=db,
-        asignacion=asig,
-        usuario=current_user,
-        motivo=body.motivo,
-    )
     return CancelacionResponse(
         id_asignacion=asig_actualizada.id_asignacion,
         id_taller=asig_actualizada.id_taller,
