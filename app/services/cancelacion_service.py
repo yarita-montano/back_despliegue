@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.models.catalogos import EstadoAsignacion, EstadoIncidente, EstadoPago, MetodoPago
+from app.models.cotizacion import Cotizacion
 from app.models.incidente import (
     Asignacion,
     HistorialEstadoAsignacion,
@@ -68,9 +69,24 @@ def cancelar_asignacion(
     if factor is None:
         raise HTTPException(500, f"Estado '{estado_actual}' sin regla de compensacion")
 
-    # La compensacion es un porcentaje de la cotizacion que vio el cliente
-    # (costo_estimado de la asignacion), no de una tarifa de traslado aparte.
-    base = Decimal(str(asignacion.costo_estimado or 0))
+    # La compensacion es un porcentaje de la cotizacion que acepto el cliente.
+    # OJO: asignacion.costo_estimado SOLO se llena al COMPLETAR el servicio
+    # (costo_final del tecnico), asi que en una cancelacion en curso siempre esta
+    # en None y la base daria 0. La cotizacion real vive en la tabla cotizacion
+    # (una por incidente+taller). Tomamos su monto_total y caemos a costo_estimado
+    # solo si no hubo cotizacion (categorias de servicio directo).
+    cotizacion = (
+        db.query(Cotizacion)
+        .filter(
+            Cotizacion.id_incidente == asignacion.id_incidente,
+            Cotizacion.id_taller == asignacion.id_taller,
+        )
+        .first()
+    )
+    if cotizacion is not None and cotizacion.monto_total > 0:
+        base = Decimal(str(cotizacion.monto_total))
+    else:
+        base = Decimal(str(asignacion.costo_estimado or 0))
     compensacion = (base * factor).quantize(Decimal("0.01"))
 
     estado_cancelada = (
