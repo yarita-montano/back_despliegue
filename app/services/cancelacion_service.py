@@ -5,8 +5,13 @@ from decimal import Decimal
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.models.catalogos import EstadoAsignacion, EstadoPago, MetodoPago
-from app.models.incidente import Asignacion, HistorialEstadoAsignacion
+from app.models.catalogos import EstadoAsignacion, EstadoIncidente, EstadoPago, MetodoPago
+from app.models.incidente import (
+    Asignacion,
+    HistorialEstadoAsignacion,
+    HistorialEstadoIncidente,
+    Incidente,
+)
 from app.models.tenant import Tenant
 from app.models.transaccional import Pago
 from app.models.usuario import Usuario
@@ -89,6 +94,30 @@ def cancelar_asignacion(
     asignacion.motivo_cancelacion = motivo
     asignacion.compensacion_monto = compensacion
     asignacion.compensacion_pagada = compensacion == 0
+
+    # Cerrar el incidente: la cancelacion del cliente termina el servicio, asi el
+    # incidente deja de contar como "activo" (libera la regla "1 incidente activo
+    # por usuario", 409) y queda coherente con la asignacion cancelada.
+    incidente = db.get(Incidente, asignacion.id_incidente)
+    if incidente:
+        estado_inc_cancelado = (
+            db.query(EstadoIncidente)
+            .filter(EstadoIncidente.nombre == "cancelado")
+            .first()
+        )
+        if (
+            estado_inc_cancelado
+            and incidente.id_estado != estado_inc_cancelado.id_estado
+        ):
+            db.add(
+                HistorialEstadoIncidente(
+                    id_incidente=incidente.id_incidente,
+                    id_estado_anterior=incidente.id_estado,
+                    id_estado_nuevo=estado_inc_cancelado.id_estado,
+                    observacion=f"Cancelado por cliente (compensacion {compensacion}).",
+                )
+            )
+            incidente.id_estado = estado_inc_cancelado.id_estado
 
     if compensacion > 0:
         estado_pago_pendiente = (

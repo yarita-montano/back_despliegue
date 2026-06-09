@@ -106,16 +106,67 @@ def _descargar_archivo(url: str, mime_map: dict) -> Optional[tuple[bytes, str]]:
         return None
 
 
+def _clasificacion_fallback(db: Session, incidente: Incidente, motivo: str) -> dict:
+    """
+    Clasificacion segura cuando la IA no esta disponible (cuota 429, red caida,
+    sin API key, JSON invalido...). No rompe el flujo del reporte: rellena lo que
+    falte con valores por defecto y marca el incidente para revision manual.
+    Respeta una clasificacion previa si ya existia.
+    """
+    faltaba_categoria = incidente.id_categoria is None
+
+    if incidente.id_categoria is None:
+        cat = (
+            db.query(CategoriaProblema).filter(CategoriaProblema.nombre == "incierto").first()
+            or db.query(CategoriaProblema).filter(CategoriaProblema.nombre == "otros").first()
+            or db.query(CategoriaProblema).order_by(CategoriaProblema.id_categoria).first()
+        )
+        if cat:
+            incidente.id_categoria = cat.id_categoria
+
+    if incidente.id_prioridad is None:
+        pri = (
+            db.query(Prioridad).filter(Prioridad.nivel == "media").first()
+            or db.query(Prioridad).order_by(Prioridad.orden).first()
+        )
+        if pri:
+            incidente.id_prioridad = pri.id_prioridad
+
+    # Solo se degrada si NO habia una clasificacion buena previa.
+    if faltaba_categoria:
+        incidente.clasificacion_ia_confianza = 0.0
+        incidente.requiere_revision_manual = True
+        if not incidente.resumen_ia:
+            incidente.resumen_ia = (
+                "Clasificacion automatica no disponible. Pendiente de revision manual."
+            )
+
+    db.commit()
+    db.refresh(incidente)
+
+    return {
+        "id_categoria": incidente.id_categoria,
+        "id_prioridad": incidente.id_prioridad,
+        "resumen_ia": incidente.resumen_ia,
+        "confianza": float(incidente.clasificacion_ia_confianza or 0.0),
+        "requiere_revision_manual": bool(incidente.requiere_revision_manual),
+        "ia_fallback": True,
+        "motivo": motivo[:200],
+    }
+
+
 def clasificar_incidente(db: Session, incidente: Incidente) -> dict:
     """
-    Llama a Gemini 2.5 Pro y actualiza el incidente con los campos
-    id_categoria, id_prioridad, resumen_ia y clasificacion_ia_confianza.
+    Llama a Gemini y actualiza el incidente con los campos id_categoria,
+    id_prioridad, resumen_ia y clasificacion_ia_confianza. Si la IA no esta
+    disponible (cuota, red, etc.), degrada con gracia via _clasificacion_fallback
+    en vez de romper el flujo (no lanza por errores de runtime de la IA).
     """
     if _client is None:
-        raise RuntimeError(
-            "GEMINI_API_KEY no esta configurada en .env. "
-            "Obten una en https://aistudio.google.com/apikey"
+        logger.warning(
+            "[IA] GEMINI_API_KEY no configurada; clasificacion por defecto (revision manual)."
         )
+        return _clasificacion_fallback(db, incidente, "GEMINI_API_KEY no configurada")
 
     categorias: List[CategoriaProblema] = db.query(CategoriaProblema).all()
     prioridades: List[Prioridad] = db.query(Prioridad).order_by(Prioridad.orden).all()
@@ -191,32 +242,34 @@ Analiza las evidencias (imagenes adjuntas) junto con el texto y responde con el 
                 max_output_tokens=2048,
             ),
         )
-    except Exception as e:
-        logger.exception(f"[IA] Error llamando a Gemini: {e}")
-        raise RuntimeError(f"Error llamando a Gemini: {e}") from e
 
-    respuesta_texto = (respuesta.text or "").strip()
-    logger.info(f"[IA] Respuesta Gemini (primeros 500 chars): {respuesta_texto[:500]}")
+        respuesta_texto = (respuesta.text or "").strip()
+        logger.info(f"[IA] Respuesta Gemini (primeros 500 chars): {respuesta_texto[:500]}")
 
-    match = re.search(r"\{.*\}", respuesta_texto, re.DOTALL)
-    if not match:
-        logger.error(f"[IA] Respuesta sin JSON: {respuesta_texto}")
-        raise ValueError(f"Respuesta IA no contiene JSON: {respuesta_texto}")
+        match = re.search(r"\{.*\}", respuesta_texto, re.DOTALL)
+        if not match:
+            raise ValueError(f"Respuesta IA sin JSON: {respuesta_texto[:200]}")
 
-    try:
         data = json.loads(match.group(0))
-    except json.JSONDecodeError as e:
-        raise ValueError(f"JSON invalido de la IA: {e}") from e
 
-    id_categoria = int(data["id_categoria"])
-    id_prioridad = int(data["id_prioridad"])
-    resumen_ia = str(data.get("resumen_ia", ""))[:1000]
-    confianza = float(data.get("confianza", 0.0))
+        id_categoria = int(data["id_categoria"])
+        id_prioridad = int(data["id_prioridad"])
+        resumen_ia = str(data.get("resumen_ia", ""))[:1000]
+        confianza = float(data.get("confianza", 0.0))
 
-    if not db.get(CategoriaProblema, id_categoria):
-        raise ValueError(f"La IA devolvio id_categoria invalido: {id_categoria}")
-    if not db.get(Prioridad, id_prioridad):
-        raise ValueError(f"La IA devolvio id_prioridad invalido: {id_prioridad}")
+        if not db.get(CategoriaProblema, id_categoria):
+            raise ValueError(f"id_categoria invalido: {id_categoria}")
+        if not db.get(Prioridad, id_prioridad):
+            raise ValueError(f"id_prioridad invalido: {id_prioridad}")
+    except Exception as e:
+        # Degradacion con gracia: cuota agotada (429 RESOURCE_EXHAUSTED), error de
+        # red, JSON malformado o ids invalidos NO deben romper el flujo del reporte.
+        # Se clasifica por defecto y se marca para revision manual.
+        logger.warning(
+            f"[IA] Clasificacion no disponible ({type(e).__name__}: {e}). "
+            f"Fallback a revision manual para incidente {incidente.id_incidente}."
+        )
+        return _clasificacion_fallback(db, incidente, str(e))
 
     incidente.id_categoria = id_categoria
     incidente.id_prioridad = id_prioridad
@@ -240,4 +293,5 @@ Analiza las evidencias (imagenes adjuntas) junto con el texto y responde con el 
         "resumen_ia": resumen_ia,
         "confianza": confianza,
         "requiere_revision_manual": incidente.requiere_revision_manual,
+        "ia_fallback": False,
     }

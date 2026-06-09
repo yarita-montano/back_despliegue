@@ -17,6 +17,8 @@ from app.api.cotizaciones import router as cotizaciones_router
 from app.api.asignaciones import router as asignaciones_router
 from app.api.kpis import router as kpis_router
 from app.api.adendas import router as adendas_router
+from app.api.reportes import router as reportes_router
+from app.api.seguimiento_publico import router as seguimiento_publico_router
 
 __all__ = [
     "users_router",
@@ -35,4 +37,6 @@ __all__ = [
     "asignaciones_router",
     "kpis_router",
     "adendas_router",
+    "reportes_router",
+    "seguimiento_publico_router",
 ]

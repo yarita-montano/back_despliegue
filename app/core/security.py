@@ -79,6 +79,46 @@ def verify_token(token: str) -> Optional[dict]:
         return None
 
 
+# Tokens de "compartir" (seguimiento publico en vivo)
+#
+# Un share token es un JWT independiente de los de sesion: lleva el proposito
+# 'share' y el id_incidente, para que la pagina publica de seguimiento pueda
+# resolver el incidente sin que el receptor tenga cuenta. No se reutiliza
+# create_access_token porque ese valida tipo in (usuario|taller|tecnico).
+
+SHARE_TOKEN_EXPIRE_HOURS = 24
+
+
+def create_share_token(
+    id_incidente: int,
+    expires_delta: Optional[timedelta] = None,
+) -> str:
+    """JWT de proposito 'share' para el seguimiento publico de un incidente."""
+    expire = datetime.utcnow() + (
+        expires_delta or timedelta(hours=SHARE_TOKEN_EXPIRE_HOURS)
+    )
+    to_encode = {
+        "tipo": "share",
+        "id_incidente": int(id_incidente),
+        "exp": calendar.timegm(expire.timetuple()),
+    }
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def verify_share_token(token: str) -> Optional[int]:
+    """
+    Valida un share token y devuelve el id_incidente, o None si es invalido,
+    expirado o no tiene el proposito 'share'.
+    """
+    payload = verify_token(token)
+    if not payload or payload.get("tipo") != "share":
+        return None
+    try:
+        return int(payload["id_incidente"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
 # Dependencias de autenticación
 
 _credenciales_exception = HTTPException(

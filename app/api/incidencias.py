@@ -814,11 +814,14 @@ def obtener_ubicacion_tecnico(
 @router.patch(
     "/{id_incidente}/cancelar",
     response_model=IncidenteDetalle,
-    summary="Cancelar un incidente activo",
+    summary="Cancelar un incidente activo (en cualquier estado)",
     description=(
-        "El cliente cancela un incidente propio en estado pendiente o en_proceso. "
-        "Si la asignacion ya esta 'en_camino' se crea automaticamente un Pago de "
-        "tipo 'penalizacion' (tarifa fija USD 5)."
+        "El cliente cancela un incidente propio en CUALQUIER estado activo "
+        "(pendiente, en_proceso, aceptada, en_camino, llegado); solo se excluyen "
+        "los terminales 'atendido' y 'cancelado'. Si hay una asignacion activa, "
+        "se calcula la compensacion al taller segun el estado (porcentajes "
+        "configurables por tenant: aceptada 50%, en_camino/llegado 100%) y se "
+        "cierra el incidente."
     ),
 )
 def cancelar_incidente(
@@ -827,7 +830,8 @@ def cancelar_incidente(
     current_user: Usuario = Depends(get_current_user),
 ):
     from app.models.incidente import HistorialEstadoIncidente
-    from app.services import pago_service
+    from app.models.catalogos import EstadoAsignacion
+    from app.services import cancelacion_service
 
     incidente = db.query(Incidente).filter(
         Incidente.id_incidente == id_incidente,
@@ -837,50 +841,53 @@ def cancelar_incidente(
         raise HTTPException(status_code=404, detail="Incidente no encontrado o no te pertenece")
 
     estado_actual = db.get(EstadoIncidente, incidente.id_estado)
-    if not estado_actual or estado_actual.nombre not in ("pendiente", "en_proceso"):
+    # Solo se bloquean los estados TERMINALES; cualquier estado activo es cancelable.
+    if not estado_actual or estado_actual.nombre in ("atendido", "cancelado"):
         raise HTTPException(
             status_code=400,
-            detail=f"Solo puedes cancelar incidentes pendientes o en proceso. Estado actual: '{estado_actual.nombre if estado_actual else '?'}'.",
+            detail=(
+                f"No puedes cancelar un incidente '{estado_actual.nombre if estado_actual else '?'}'."
+            ),
         )
 
+    # Si hay una asignacion ACTIVA (no terminal), se cancela via el servicio de
+    # compensacion: calcula el % segun el estado y ademas cierra el incidente.
+    estados_asig_terminales = {"completada", "cancelada", "rechazada"}
+    asignacion_activa = (
+        db.query(Asignacion)
+        .join(
+            EstadoAsignacion,
+            EstadoAsignacion.id_estado_asignacion == Asignacion.id_estado_asignacion,
+        )
+        .filter(
+            Asignacion.id_incidente == incidente.id_incidente,
+            ~EstadoAsignacion.nombre.in_(estados_asig_terminales),
+        )
+        .order_by(Asignacion.updated_at.desc())
+        .first()
+    )
+
+    if asignacion_activa:
+        cancelacion_service.cancelar_asignacion(
+            db=db,
+            asignacion=asignacion_activa,
+            usuario=current_user,
+            motivo="Cancelado por el cliente",
+        )
+        db.refresh(incidente)
+        return incidente
+
+    # Sin asignacion activa (p.ej. 'pendiente' sin taller asignado todavia):
+    # solo se cierra el incidente, sin compensacion.
     estado_cancelado = db.query(EstadoIncidente).filter_by(nombre="cancelado").first()
     if not estado_cancelado:
         raise HTTPException(status_code=500, detail="Estado 'cancelado' no encontrado en catálogo")
-
-    # Penalizacion automatica si la asignacion activa esta 'en_camino'.
-    pago_penalizacion = None
-    try:
-        from app.models.catalogos import EstadoAsignacion
-
-        estado_en_camino = (
-            db.query(EstadoAsignacion).filter_by(nombre="en_camino").first()
-        )
-        if estado_en_camino:
-            asig_en_camino = (
-                db.query(Asignacion)
-                .filter(
-                    Asignacion.id_incidente == incidente.id_incidente,
-                    Asignacion.id_estado_asignacion == estado_en_camino.id_estado_asignacion,
-                )
-                .first()
-            )
-            if asig_en_camino:
-                pago_penalizacion = pago_service.penalizar_por_cancelacion(
-                    db, incidente
-                )
-    except Exception:
-        # No bloquear la cancelacion si el cobro falla; se registra en logs.
-        pago_penalizacion = None
 
     db.add(HistorialEstadoIncidente(
         id_incidente=incidente.id_incidente,
         id_estado_anterior=incidente.id_estado,
         id_estado_nuevo=estado_cancelado.id_estado,
-        observacion=(
-            "Cancelado por el cliente (con penalizacion)"
-            if pago_penalizacion
-            else "Cancelado por el cliente"
-        ),
+        observacion="Cancelado por el cliente",
     ))
     incidente.id_estado = estado_cancelado.id_estado
     db.commit()

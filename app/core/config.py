@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     # True  = todo endpoint protegido requiere id_tenant en JWT.
     TENANT_ENFORCEMENT: bool = False
 
+    # URL del frontend web. Se usa para construir enlaces compartibles
+    # (p.ej. el seguimiento publico en vivo: {FRONTEND_URL}/seguir/{token}).
+    FRONTEND_URL: str = "https://www.sjaskashdkashhdjash.space"
+
     # Redis (cache, pub/sub para websockets, rate-limit)
     REDIS_URL: str = ""
 
