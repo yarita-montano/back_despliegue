@@ -89,6 +89,17 @@ def cancelar_asignacion(
         base = Decimal(str(asignacion.costo_estimado or 0))
     compensacion = (base * factor).quantize(Decimal("0.01"))
 
+    # Diagnostico: deja en el log de Render como se calculo la compensacion
+    # (estado, factor, cotizacion, base). Util para validar; quitar luego.
+    print(
+        f"[CANCELACION] asig={asignacion.id_asignacion} estado={estado_actual} "
+        f"factor={factor} cotizacion={'si' if cotizacion else 'no'} "
+        f"monto_cot={cotizacion.monto_total if cotizacion else None} "
+        f"costo_est={asignacion.costo_estimado} base={base} "
+        f"compensacion={compensacion}",
+        flush=True,
+    )
+
     estado_cancelada = (
         db.query(EstadoAsignacion).filter(EstadoAsignacion.nombre == "cancelada").first()
     )
@@ -154,6 +165,7 @@ def cancelar_asignacion(
                     id_incidente=asignacion.id_incidente,
                     id_metodo_pago=metodo.id_metodo_pago,
                     id_estado_pago=estado_pago_pendiente.id_estado_pago,
+                    tipo="penalizacion",
                     monto_total=compensacion,
                     comision_plataforma=comision,
                     monto_taller=monto_taller,

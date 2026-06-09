@@ -379,11 +379,14 @@ def listar_mis_pagos(
         db.query(Incidente, Asignacion, Pago, EstadoPago)
         .outerjoin(sub_asig_completada, sub_asig_completada.c.id_incidente == Incidente.id_incidente)
         .outerjoin(Asignacion, Asignacion.id_asignacion == sub_asig_completada.c.id_asignacion)
-        # Filtrar tipo='servicio': sin este filtro, un incidente que tambien
-        # tenga Pago tipo='preauth' o 'penalizacion' aparece duplicado.
+        # Incluimos 'servicio' y 'penalizacion' (compensacion por cancelacion):
+        # ambos son cobros reales al cliente. Excluimos 'preauth' (solo reserva).
         .outerjoin(
             Pago,
-            and_(Pago.id_incidente == Incidente.id_incidente, Pago.tipo == "servicio"),
+            and_(
+                Pago.id_incidente == Incidente.id_incidente,
+                Pago.tipo.in_(["servicio", "penalizacion"]),
+            ),
         )
         .outerjoin(EstadoPago, EstadoPago.id_estado_pago == Pago.id_estado_pago)
         .filter(Incidente.id_usuario == current_user.id_usuario)
