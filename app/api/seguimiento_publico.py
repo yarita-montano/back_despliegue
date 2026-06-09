@@ -79,7 +79,7 @@ def compartir_seguimiento(
     response_model=SeguimientoPublicoResponse,
     summary="Seguimiento publico (sin auth): posiciones cliente/tecnico + ETA",
 )
-async def seguimiento_publico(token: str, db: Session = Depends(get_db)):
+def seguimiento_publico(token: str, db: Session = Depends(get_db)):
     id_incidente = verify_share_token(token)
     if id_incidente is None:
         raise HTTPException(401, "Enlace invalido o expirado")
@@ -138,15 +138,22 @@ async def seguimiento_publico(token: str, db: Session = Depends(get_db)):
                     .first()
                 )
                 nombre_tecnico = u.nombre if u else "Tecnico"
+                # ETA con haversine LOCAL (instantaneo, sin llamada externa). Este
+                # endpoint se consulta por polling cada pocos segundos, asi que NO
+                # debe depender de un servicio de routing externo (lento / rate-limit
+                # / colgado), que dejaba la pagina en "Cargando" indefinidamente.
                 try:
-                    dist_km, eta_seg = await tracking_service.calcular_eta(
+                    dist_km = tracking_service.haversine_km(
                         ubic.latitud,
                         ubic.longitud,
                         incidente.latitud,
                         incidente.longitud,
                     )
                     distancia_km = round(dist_km, 2)
-                    eta_min = max(0, round(eta_seg / 60))
+                    eta_min = max(
+                        0,
+                        round((dist_km / tracking_service.VELOCIDAD_DEFAULT_KMH) * 60),
+                    )
                 except Exception:
                     # ETA es best-effort; si falla seguimos sin ella.
                     pass
