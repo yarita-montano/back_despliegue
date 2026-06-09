@@ -126,6 +126,10 @@ class AsignacionResponse(BaseModel):
     eta_minutos: Optional[int] = None
     tiempo_estimado_reparacion_min: Optional[int] = None
     nota_taller: Optional[str] = None
+    motivo_cancelacion: Optional[str] = None
+    cancelada_por: Optional[str] = None  # 'cliente' | 'taller'
+    compensacion_monto: Optional[float] = None
+    compensacion_pagada: Optional[bool] = None
     created_at: datetime
     updated_at: datetime
 
